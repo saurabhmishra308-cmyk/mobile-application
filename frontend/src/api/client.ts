@@ -4,6 +4,9 @@ import { API_BASE } from "@/src/theme";
 export const TOKEN_KEY = "envirolytics.token";
 export const USER_KEY = "envirolytics.user";
 
+export const OWN_BACKEND_URL =
+  process.env.EXPO_PUBLIC_BACKEND_URL || "";
+
 export type UserProfile = {
   id: string;
   email: string;
@@ -149,6 +152,13 @@ export const api = {
     authed<{ readings: DwlrReading[]; count: number }>(
       "/api/instruments/dwlr/latest",
     ),
+  dwlrHistory: (hw: string, hours: number = 24) =>
+    authed<{
+      instrument_type: string;
+      hardware_id: string;
+      readings: DwlrReading[];
+      count: number;
+    }>(`/api/instruments/dwlr/${encodeURIComponent(hw)}/history?hours=${hours}`),
   flowmeterLatest: () =>
     authed<{ flowmeters: FlowmeterReading[]; count: number }>(
       "/api/flowmeter/latest",
@@ -181,4 +191,78 @@ export const api = {
       grand_total_kl: number;
       count: number;
     }>(`/api/reports/borewell-consumption?days=${days}`),
+  hourlyPumpingVsLevel: (hardwareId: string, hours: number = 24) =>
+    authed<{
+      flowmeter_id: string;
+      dwlr_id: string | null;
+      hours: number;
+      series: { hour_label: string; start: string; end: string; pumped_kl: number; level_m: number | null }[];
+    }>(
+      `/api/reports/hourly-pumping-vs-level?hardware_id=${encodeURIComponent(
+        hardwareId,
+      )}&hours=${hours}`,
+    ),
+  levelVsRainfall: (hardwareId: string, days: number = 7) =>
+    authed<{
+      dwlr_id: string;
+      latitude: number | null;
+      longitude: number | null;
+      start: string;
+      end: string;
+      series: { date: string; level_m: number | null; rainfall_mm: number | null }[];
+    }>(
+      `/api/reports/level-vs-rainfall?hardware_id=${encodeURIComponent(
+        hardwareId,
+      )}&days=${days}`,
+    ),
+  // Server-generated file exports; caller downloads binary via the URL.
+  exportUrl: (params: {
+    instrument_type: "dwlr" | "flowmeter";
+    format: "csv" | "pdf";
+    hardware_id?: string;
+    days?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    qs.set("instrument_type", params.instrument_type);
+    qs.set("format", params.format);
+    if (params.hardware_id) qs.set("hardware_id", params.hardware_id);
+    if (params.days) qs.set("days", String(params.days));
+    return `${API_BASE}/api/flowmeter-mgmt/export?${qs.toString()}`;
+  },
 };
+
+// ---------- Our own backend (push relay) ----------
+export async function registerPushOnBackend(body: {
+  user_id: string;
+  platform: string;
+  device_token: string;
+  envirolytics_token?: string;
+}) {
+  if (!OWN_BACKEND_URL) throw new Error("EXPO_PUBLIC_BACKEND_URL not set");
+  const res = await fetch(`${OWN_BACKEND_URL}/api/register-push`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`register-push HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function unregisterPushOnBackend(user_id: string) {
+  if (!OWN_BACKEND_URL) return;
+  try {
+    await fetch(`${OWN_BACKEND_URL}/api/unregister-push`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id }),
+    });
+  } catch {
+    /* best effort */
+  }
+}
+
+export async function getAuthToken() {
+  return storage.secureGet<string>(TOKEN_KEY, "");
+}

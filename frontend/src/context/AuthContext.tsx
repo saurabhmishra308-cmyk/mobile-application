@@ -13,7 +13,9 @@ import {
   UserProfile,
   api,
   loginRequest,
+  unregisterPushOnBackend,
 } from "@/src/api/client";
+import { registerForPush } from "@/src/utils/push";
 
 type AuthState = {
   ready: boolean;
@@ -48,6 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const me = await api.me();
           await storage.setItem(USER_KEY, JSON.stringify(me));
           setUser(me);
+          registerForPush(me.id, t);
         } catch {}
       }
     })();
@@ -64,15 +67,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     await storage.setItem(USER_KEY, JSON.stringify(profile));
     setUser(profile);
+    // Fire-and-forget push registration on native builds.
+    registerForPush(profile.id, res.access_token);
     return profile;
   }, []);
 
   const signOut = useCallback(async () => {
+    if (user?.id) unregisterPushOnBackend(user.id);
     await storage.secureRemove(TOKEN_KEY);
     await storage.removeItem(USER_KEY);
     setToken(null);
     setUser(null);
-  }, []);
+  }, [user?.id]);
 
   const refreshUser = useCallback(async (u: UserProfile) => {
     await storage.setItem(USER_KEY, JSON.stringify(u));

@@ -26,6 +26,7 @@ import {
   prettyType,
   readingTs,
 } from "@/src/utils/format";
+import { downloadAndShare } from "@/src/utils/download";
 
 const HOUR_OPTIONS = [6, 24, 72, 168] as const;
 
@@ -49,6 +50,8 @@ export default function DeviceDetail() {
   const [hours, setHours] = useState<number>(24);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [downloadingKind, setDownloadingKind] = useState<null | "csv" | "pdf">(null);
+  const [downloadNote, setDownloadNote] = useState<string | null>(null);
 
   const load = useCallback(
     async (hrs: number = hours) => {
@@ -69,15 +72,16 @@ export default function DeviceDetail() {
           setLastSeen(o?.last_seen ?? (mine ? readingTs(mine || {}) : null));
         } else {
           // dwlr
-          const [latestRes, off] = await Promise.all([
+          const [latestRes, histRes, off] = await Promise.all([
             api.dwlrLatest(),
+            api.dwlrHistory(hardwareId, hrs),
             api.offline(24),
           ]);
           const mine = (latestRes.readings || []).find(
             (r) => r.hardware_id === hardwareId,
           );
           setLatest(mine || null);
-          setHistory([]); // no dedicated DWLR history endpoint discovered
+          setHistory(histRes.readings || []);
           const o = (off.offline || []).find((d) => d.hardware_id === hardwareId);
           setIsOffline(!!o);
           setLastSeen(o?.last_seen ?? (mine ? readingTs(mine || {}) : null));
@@ -266,59 +270,114 @@ export default function DeviceDetail() {
             ))}
           </View>
 
-          {kind === "flowmeter" ? (
-            <View style={styles.chartCard}>
-              <View style={styles.chartHead}>
-                <View>
-                  <Text style={styles.chartEyebrow}>FLOW RATE</Text>
-                  <Text style={styles.chartTitle}>Last {hours}h</Text>
-                </View>
-                <View style={styles.chartTabs}>
-                  {HOUR_OPTIONS.map((h) => (
-                    <TouchableOpacity
-                      key={h}
-                      testID={`hours-${h}`}
-                      onPress={() => setHours(h)}
+          {/* Chart card (flowmeter → flow rate; DWLR → water level) */}
+          <View style={styles.chartCard}>
+            <View style={styles.chartHead}>
+              <View>
+                <Text style={styles.chartEyebrow}>{chartMeta.title}</Text>
+                <Text style={styles.chartTitle}>Last {hours}h</Text>
+              </View>
+              <View style={styles.chartTabs}>
+                {HOUR_OPTIONS.map((h) => (
+                  <TouchableOpacity
+                    key={h}
+                    testID={`hours-${h}`}
+                    onPress={() => setHours(h)}
+                    style={[
+                      styles.chartTab,
+                      hours === h && {
+                        backgroundColor: `${chartMeta.color}22`,
+                        borderColor: chartMeta.color,
+                      },
+                    ]}
+                  >
+                    <Text
                       style={[
-                        styles.chartTab,
-                        hours === h && {
-                          backgroundColor: "rgba(16,185,129,0.15)",
-                          borderColor: colors.eco,
-                        },
+                        styles.chartTabText,
+                        hours === h && { color: chartMeta.color },
                       ]}
                     >
-                      <Text
-                        style={[
-                          styles.chartTabText,
-                          hours === h && { color: colors.eco },
-                        ]}
-                      >
-                        {h < 24 ? `${h}h` : `${h / 24}d`}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                      {h < 24 ? `${h}h` : `${h / 24}d`}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
               </View>
-              <LineChart
-                testID="detail-chart"
-                points={chartData}
-                color={colors.eco}
-                width={chartWidth}
-                height={180}
-                unit=" m³/h"
-              />
-              <Text style={styles.chartMeta}>
-                {chartData.length} data point{chartData.length === 1 ? "" : "s"}
-              </Text>
             </View>
-          ) : (
-            <View style={styles.infoCard}>
-              <Ionicons name="information-circle-outline" size={18} color={colors.water} />
-              <Text style={styles.infoText}>
-                DWLR historical trends coming soon. Latest reading is shown above and refreshes on pull-to-refresh.
-              </Text>
+            <LineChart
+              testID="detail-chart"
+              points={chartData}
+              color={chartMeta.color}
+              width={chartWidth}
+              height={180}
+              unit={chartMeta.unit}
+            />
+            <Text style={styles.chartMeta}>
+              {chartData.length} data point{chartData.length === 1 ? "" : "s"}
+            </Text>
+          </View>
+
+          {/* Download buttons */}
+          <View style={styles.chartCard} testID="detail-downloads">
+            <Text style={styles.chartEyebrow}>DOWNLOAD DATA</Text>
+            <Text style={styles.chartTitle}>Share as CSV or PDF</Text>
+            <View style={{ flexDirection: "row", gap: spacing.md, marginTop: spacing.md }}>
+              <TouchableOpacity
+                testID="detail-download-csv"
+                style={styles.dlBtn}
+                disabled={downloadingKind === "csv"}
+                onPress={async () => {
+                  setDownloadingKind("csv");
+                  setDownloadNote(null);
+                  const url = api.exportUrl({
+                    instrument_type: kind === "dwlr" ? "dwlr" : "flowmeter",
+                    format: "csv",
+                    hardware_id: hardwareId,
+                  });
+                  const filename = `${hardwareId}_${new Date().toISOString().slice(0, 10)}.csv`;
+                  const res = await downloadAndShare({ url, filename, mime: "text/csv" });
+                  setDownloadNote("error" in res ? `Failed: ${res.error}` : `Saved ${res.filename}`);
+                  setDownloadingKind(null);
+                }}
+              >
+                {downloadingKind === "csv" ? (
+                  <ActivityIndicator color={colors.eco} size="small" />
+                ) : (
+                  <Ionicons name="document-text-outline" size={16} color={colors.eco} />
+                )}
+                <Text style={styles.dlBtnText}>Excel-ready CSV</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="detail-download-pdf"
+                style={styles.dlBtn}
+                disabled={downloadingKind === "pdf"}
+                onPress={async () => {
+                  setDownloadingKind("pdf");
+                  setDownloadNote(null);
+                  const url = api.exportUrl({
+                    instrument_type: kind === "dwlr" ? "dwlr" : "flowmeter",
+                    format: "pdf",
+                    hardware_id: hardwareId,
+                  });
+                  const filename = `${hardwareId}_${new Date().toISOString().slice(0, 10)}.pdf`;
+                  const res = await downloadAndShare({ url, filename, mime: "application/pdf" });
+                  setDownloadNote("error" in res ? `Failed: ${res.error}` : `Saved ${res.filename}`);
+                  setDownloadingKind(null);
+                }}
+              >
+                {downloadingKind === "pdf" ? (
+                  <ActivityIndicator color={colors.water} size="small" />
+                ) : (
+                  <Ionicons name="document-attach-outline" size={16} color={colors.water} />
+                )}
+                <Text style={styles.dlBtnText}>Compliance PDF</Text>
+              </TouchableOpacity>
             </View>
-          )}
+            {downloadNote ? (
+              <Text style={styles.dlNote} testID="detail-download-note">
+                {downloadNote}
+              </Text>
+            ) : null}
+          </View>
 
           <View style={styles.detailCard}>
             <Text style={styles.detailTitle}>Latest Reading</Text>
@@ -539,4 +598,23 @@ const styles = StyleSheet.create({
   detailValue: { color: colors.text, fontSize: 12, fontFamily: font.mono, flex: 1, textAlign: "right" },
 
   emptyText: { color: colors.textMuted, fontSize: 12 },
+  dlBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  dlBtnText: { color: colors.text, fontSize: 12.5, fontWeight: "700" },
+  dlNote: {
+    color: colors.eco,
+    fontSize: 11.5,
+    textAlign: "center",
+    marginTop: spacing.sm,
+  },
 });
