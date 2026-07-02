@@ -66,7 +66,7 @@ export default function DeviceDetail() {
           setHistory(histRes.readings || []);
           const o = (off.offline || []).find((d) => d.hardware_id === hardwareId);
           setIsOffline(!!o);
-          setLastSeen(o?.last_seen ?? mine ? readingTs(mine || {}) : null);
+          setLastSeen(o?.last_seen ?? (mine ? readingTs(mine || {}) : null));
         } else {
           // dwlr
           const [latestRes, off] = await Promise.all([
@@ -80,7 +80,7 @@ export default function DeviceDetail() {
           setHistory([]); // no dedicated DWLR history endpoint discovered
           const o = (off.offline || []).find((d) => d.hardware_id === hardwareId);
           setIsOffline(!!o);
-          setLastSeen(o?.last_seen ?? mine ? readingTs(mine || {}) : null);
+          setLastSeen(o?.last_seen ?? (mine ? readingTs(mine || {}) : null));
         }
       } catch (e: any) {
         if (e?.status === 401) await signOut();
