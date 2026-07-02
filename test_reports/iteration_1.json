@@ -1,0 +1,32 @@
+{
+  "summary": "First iteration frontend smoke of the Envirolytics Monitor Expo app at https://field-data-viewer.preview.emergentagent.com (mobile 390x844). All 11 test scenarios PASS. Verified: login (valid + invalid credential error banner 'Invalid email or password'), Dashboard renders 4 metric cards (Instruments=4, Online=0, Offline=4, Alerts=0), Instrument Mix (DWLR 2 / Flowmeter 2), Live Weather card (Lucknow, 35.2°C, Heavy intensity rain), MQTT broker pill, and Offline Devices preview list. Devices tab lists all 4 instruments, chips (All/DWLR/Flowmeters/Offline) stay in a horizontal scroll strip and are tappable, search input renders. Tapping device-card-MAPTEST_FM_001 opens device-detail-screen, all four hour-tabs (hours-6/24/72/168) work (chart shows expected 'No historical data yet · 0 data points'), status pill is 'Offline', back button returns to Devices. Alerts screen shows Limit Breaches empty state (breaches-empty visible, count 0) and Offline Devices with count pill 4 and 4 rows. Profile shows correct data (Envirolytics Admin, admin@envirolytics.com, ADMIN role, Location Lucknow HQ, Coordinates 26.8467/80.9462, Username admin, Active Yes) and permissions grid (Dashboard/Reports/Analysis/Certificates/Audit/Limits = Allowed). Logout clears the session and returns to login. Deprecated packages detected: none. SafeAreaView issues detected: none.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/device/[id].tsx (setLastSeen)",
+        "issue": "Operator precedence bug at lines 69 and 83: `setLastSeen(o?.last_seen ?? mine ? readingTs(mine || {}) : null)`. Because `??` binds tighter than `?:`, this evaluates as `((o?.last_seen ?? mine) ? readingTs(mine||{}) : null)`, so for an offline device that DOES have a last_seen the UI displays the latest-reading timestamp (or 'Never') instead of the offline endpoint's last_seen. Not visible in this test because all offline devices are `never_reported`, but latent. Fix: wrap with parentheses -> `setLastSeen((o?.last_seen) ?? (mine ? readingTs(mine) : null))`.",
+        "testID": "detail-hardware-id / Last seen row",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: fix operator-precedence bug in /app/frontend/app/device/[id].tsx (lines 69, 83) so 'Last seen' shows the offline endpoint's last_seen for offline devices that reported at least once."
+  ],
+  "critical_code_review_comments": [
+    "API_BASE is hardcoded to 'https://monitor.envirolytics.in' in /app/frontend/src/theme.ts. Acceptable for this project since the app is explicitly required to hit the production Envirolytics API, but consider moving it into EXPO_PUBLIC_MONITOR_API_URL for parity with env-driven config.",
+    "console.warning: 'props.pointerEvents is deprecated. Use style.pointerEvents' during login screen render — coming from a react-native-web internal component (likely LinearGradient / SafeAreaView). Not a blocker, but worth tracking."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend-only run)", "frontend": "100% (11/11 review scenarios)" },
+  "seed_data_creation": "None — used remote production account (admin@envirolytics.com) as instructed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Tabs in Expo Router web are rendered as plain divs with the tab title text but the get_by_text('Alerts').first selector can accidentally match the 'Alerts' metric-card label on the (invisible but still mounted) Dashboard screen. Reliable way to switch tabs: query the DOM for elements whose innerText matches ^(Dashboard|Devices|Alerts|Profile)$ AND whose bounding-box y > 700, then click via page.mouse.click(x, y). See the last playwright script in this iteration for a working helper.",
+  "rca_of_issue": "N/A — no functional bugs blocked the reviewed scenarios."
+}
