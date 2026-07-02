@@ -1,0 +1,96 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast) optimized for IoT Dashboards",
+  "colors": {
+    "primary_background": "#1a2332",
+    "surface": "#243042",
+    "surface_elevated": "#2a384d",
+    "border": "rgba(255, 255, 255, 0.1)",
+    "text_primary": "#F8FAFC",
+    "text_secondary": "#94A3B8",
+    "accent_water": "#0ea5e9",
+    "accent_eco": "#10B981",
+    "danger": "#EF4444",
+    "warning": "#F59E0B",
+    "online_status": "#10B981",
+    "offline_status": "#64748B"
+  },
+  "typography": {
+    "headings": "Plus Jakarta Sans",
+    "body": "Inter",
+    "numerals": "JetBrains Mono",
+    "sizes": {
+      "h1": "text-2xl font-bold tracking-tight",
+      "h2": "text-xl font-semibold tracking-tight",
+      "h3": "text-lg font-medium",
+      "body": "text-sm",
+      "caption": "text-xs uppercase tracking-widest",
+      "metric": "text-3xl font-bold font-mono"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Mobile-first, dense but readable. No wasted space.",
+    "container_padding": "p-4 md:p-6",
+    "grid": "grid-cols-1 sm:grid-cols-2 gap-4",
+    "cards": {
+      "radius": "rounded-lg",
+      "border": "border border-white/10",
+      "shadow": "shadow-sm shadow-black/20",
+      "background": "bg-[#243042]"
+    }
+  },
+  "components": {
+    "bottom_nav": {
+      "style": "fixed bottom-0 w-full bg-[#1a2332]/90 backdrop-blur-md border-t border-white/10 z-50",
+      "layout": "flex justify-around items-center h-16 pb-safe"
+    },
+    "header": {
+      "style": "sticky top-0 z-40 bg-[#1a2332]/90 backdrop-blur-md border-b border-white/10 px-4 h-14 flex items-center justify-between"
+    },
+    "buttons": {
+      "primary": "bg-[#10B981] hover:bg-[#059669] text-white rounded-md px-4 py-2 font-medium transition-colors",
+      "secondary": "bg-[#2a384d] hover:bg-[#334155] text-white rounded-md px-4 py-2 font-medium border border-white/10 transition-colors"
+    },
+    "inputs": {
+      "style": "w-full bg-[#1a2332] border border-white/10 rounded-md px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-[#10B981]/50 focus:border-[#10B981] transition-all"
+    },
+    "status_pill": {
+      "online": "bg-[#10B981]/10 text-[#10B981] px-2 py-0.5 rounded-full text-xs font-semibold border border-[#10B981]/20",
+      "offline": "bg-slate-500/10 text-slate-400 px-2 py-0.5 rounded-full text-xs font-semibold border border-slate-500/20",
+      "alert": "bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full text-xs font-semibold border border-red-500/20"
+    },
+    "charts": {
+      "library": "recharts",
+      "style": "Use AreaChart with gradient fill. Water blue (#0ea5e9) for level, Eco Green (#10B981) for flow. Hide grid lines or use very subtle white/5. Monospace font for axes."
+    }
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "Use solid, clear icons. Size 24px for nav, 16px for inline metadata."
+  },
+  "media": {
+    "login_background": {
+      "url": "https://images.pexels.com/photos/11673926/pexels-photo-11673926.jpeg",
+      "description": "Dark blue water ripple background for the login screen to establish the environmental/water theme."
+    }
+  },
+  "testing": {
+    "attributes": "All interactive elements must have data-testid attributes (e.g., data-testid='login-button', data-testid='device-card-1')."
+  },
+  "animations": {
+    "transitions": "transition-all duration-200 ease-in-out",
+    "lists": "staggered fade-in for instrument lists"
+  },
+  "instructions_to_main_agent": [
+    "Ensure dark mode is the default and only theme.",
+    "Import Google Fonts: 'Plus Jakarta Sans' for headings, 'Inter' for body, and 'JetBrains Mono' for numbers.",
+    "Use JetBrains Mono for all numeric readings, metrics, and chart axes.",
+    "Cards should not be purely flat; use subtle borders (border-white/10) to separate them from the base deep navy background (#1a2332).",
+    "For the bottom navigation on mobile layouts, ensure safe-area padding is applied and elements are easily tappable.",
+    "Do not use generic blue/purple gradients. Stick to the environmental palette: Deep Navy, Water Blue, and Sustainable Green.",
+    "Implement Shadcn UI components but override their default styling to match the deep navy theme.",
+    "Charts must be accessible, using Recharts with responsive containers.",
+    "Do NOT create .tsx files. Use .js or .jsx as per the project environment.",
+    "Include data-testid on every interactive element."
+  ]
+}
