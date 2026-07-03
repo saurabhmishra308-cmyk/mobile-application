@@ -39,4 +39,7 @@ export const font = {
   mono: "monospace" as const,
 };
 
-export const API_BASE = "https://monitor.envirolytics.in";
+// Envirolytics API base URL. Reads from EXPO_PUBLIC_ENVIROLYTICS_URL so we
+// can point to staging / production per-deployment without a rebuild.
+export const API_BASE =
+  process.env.EXPO_PUBLIC_ENVIROLYTICS_URL || "https://monitor.envirolytics.in";

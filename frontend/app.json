@@ -25,7 +25,6 @@
         "backgroundColor": "#1a2332"
       },
       "edgeToEdgeEnabled": true,
-      "googleServicesFile": "./google-services.json",
       "intentFilters": [
         {
           "action": "VIEW",
