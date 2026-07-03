@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 2 frontend UI review at https://field-data-viewer.preview.emergentagent.com (390x844). Login screen with animated LoginScene renders correctly (sun, clouds, birds, mountains, turbines, plants, solar panels, water strip) and the dark navy card is present with ENVIROLYTICS + SUSTAINABILITY · PRIVATE · LIMITED, 'Sign in to your account' heading, email/password inputs, orange 'Sign Me In' pill, Policies link, VERSION 1.0 · SECURE LOGIN footer. Login with admin@envirolytics.com / Admin@Envirolytics2026 navigates to /dashboard. Bottom tab bar shows FIVE tabs in the correct order: Dashboard / Devices / Reports / Alerts / Profile (all tappable via get_by_role('tab', ...)). Reports tab (testID reports-screen) renders three cards: Borewell Consumption (range-7/30/90 chips + TOTAL pill + 2 borewell rows for HTTPS_SMOKE_FM_1782927309 and MAPTEST_FM_001, TOTAL 0 KL — real data from prod), Hourly Pumping (2 select-fm chips + pumping-chart + Total pumped · 0 KL over 24h footer), and Compliance Exports (all four buttons dl-fm-csv/dl-fm-pdf/dl-dwlr-csv/dl-dwlr-pdf). Tapping dl-fm-csv shows the ActivityIndicator spinner briefly and then writes 'Saved envirolytics_flowmeter_data_2026-07-03.csv' into download-note — download flow works end-to-end. Range-30 chip toggles active (green border/text) and re-fetches. Alerts tab renders Limit Breaches + Offline Devices sections. Profile tab shows Envirolytics Admin / Lucknow HQ / 26.8467 / 80.9462 / ADMIN. Logout returns to /login and login-form + scene SVG are visible again. CRITICAL: The Device Detail screen (/device/[id]) throws a red-screen 'ReferenceError: chartMeta is not defined' for BOTH Flowmeter and DWLR devices — the entire detail view is unusable (all detail-* testIDs invisible, back button gone, no FLOW RATE/WATER LEVEL chart, no metric tiles, no download buttons). This is a hard regression from iteration 1 where device detail worked. Root cause: `chartMeta` (used at app/device/[id].tsx:277, 289, 290, 297, 309, 312) is never declared — only exists as a StyleSheet key `chartMeta` at line 556. Additionally, `chartData` is hard-coded to `return []` for DWLR (line 109), so the promised WATER LEVEL chart cannot render even once chartMeta is fixed. Deprecated packages detected: none. SafeAreaView issues detected: none.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/device/[id].tsx (DeviceDetail)",
+        "issue": "RED SCREEN — ReferenceError: chartMeta is not defined. `chartMeta` is used at lines 277, 289, 290, 297, 309, 312 but never declared inside the DeviceDetail component (only a StyleSheet key `chartMeta` exists at line 556, which is unrelated). Tapping any device card (Flowmeter or DWLR) crashes the whole detail screen — none of detail-hardware-id / detail-metric-flow / detail-metric-totalizer / detail-metric-battery / hours-6/24/72/168 / detail-download-csv / detail-download-pdf / FLOW RATE / WATER LEVEL are rendered. Fix: add a useMemo returning { title, color, unit } based on `kind` ('flowmeter' → { title:'FLOW RATE', color: colors.eco, unit:' m³/h' }; 'dwlr' → { title:'WATER LEVEL', color: colors.water, unit:' m' }).",
+        "testID": "device-detail-screen",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "app/device/[id].tsx (chartData memo)",
+        "issue": "`chartData` at lines 108–121 short-circuits with `if (kind !== 'flowmeter') return [];` — even after fixing chartMeta the DWLR Water-Level chart will always be empty. Extend the memo so DWLR maps history to { t: readingTs(r), v: pickReadingValue(r, ['water_level','level','depth']) } (reversed if descending — check API order).",
+        "testID": "detail-chart",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Device Detail load (Flowmeter + DWLR)",
+        "issue": "Unreachable due to chartMeta ReferenceError — the entire screen crashes on mount so no API integration can be exercised from the UI.",
+        "affected_testIDs": ["device-detail-screen", "detail-hardware-id", "detail-metric-flow", "detail-metric-totalizer", "detail-metric-battery", "hours-6", "hours-24", "hours-72", "hours-168", "detail-download-csv", "detail-download-pdf", "detail-chart"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "URGENT: Declare `chartMeta` inside DeviceDetail (app/device/[id].tsx). Suggested implementation: `const chartMeta = useMemo(() => kind === 'dwlr' ? { title: 'WATER LEVEL', color: colors.water, unit: ' m' } : { title: 'FLOW RATE', color: colors.eco, unit: ' m³/h' }, [kind]);` placed above the return().",
+    "Extend chartData memo in app/device/[id].tsx (lines 108–121) to build the series for DWLR (map water_level/level/depth) so the Water Level chart actually renders history.",
+    "Optional cleanup: the operator-precedence issue on setLastSeen (lines 72 and 87) was flagged in iteration_1 and is still present — wrap `o?.last_seen` in parentheses so the ternary evaluates correctly for offline devices."
+  ],
+  "critical_code_review_comments": [
+    "chartMeta reference bug is a straightforward compile-time miss that should have been caught by TypeScript — but the file is being consumed via Metro's dev bundling without a full tsc pass. Consider running `npx tsc --noEmit` in CI before shipping.",
+    "chartData memo does not support DWLR at all, meaning the WATER LEVEL chart card advertised in the review request cannot be exercised even when the red screen is fixed."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only run)",
+    "frontend": "5/8 scenarios PASS (login scene, login flow, five-tab bar, Reports full flow incl. dl-fm-csv + range-30, Alerts, Profile+logout). 3 scenarios BLOCKED by device-detail red screen: Flowmeter detail, DWLR detail, and any chart interaction."
+  },
+  "seed_data_creation": "None — used the production admin account (admin@envirolytics.com) as instructed.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Prod account is admin@envirolytics.com / Admin@Envirolytics2026 against monitor.envirolytics.in. Preview URL is https://field-data-viewer.preview.emergentagent.com. Tabs are DOM-role='tab' — use page.get_by_role('tab', name='Reports'). The Reports screen's dl-fm-csv actually writes a real CSV via Web downloadAndShare (returns 'Saved envirolytics_flowmeter_data_YYYY-MM-DD.csv' inside download-note testID). BLOCKER for device-detail retest: fix chartMeta ReferenceError in app/device/[id].tsx first, otherwise every device-card tap will show 'Uncaught Error / chartMeta is not defined' modal.",
+  "rca_of_issue": "In app/device/[id].tsx the JSX at lines 277/289/290/297/309/312 references a symbol `chartMeta` that is nowhere declared in the DeviceDetail component scope. The only `chartMeta` in the file is a StyleSheet key at line 556 (`chartMeta: { color: colors.textMuted, ... }`) which is completely different. On first render React tries to read `chartMeta.title` and throws ReferenceError, unwinding the whole DeviceDetail tree — hence a full red screen. Reproduction: log in, tap any device card (e.g. device-card-MAPTEST_FM_001 or device-card-MAPTEST_DWLR_001) → red 'Uncaught Error' overlay appears immediately. Mitigation: declare chartMeta as `const chartMeta = useMemo(() => kind === 'dwlr' ? { title: 'WATER LEVEL', color: colors.water, unit: ' m' } : { title: 'FLOW RATE', color: colors.eco, unit: ' m³/h' }, [kind]);` before the JSX return, and also extend chartData to build the DWLR series so the Water Level chart renders."
+}
