@@ -139,6 +139,17 @@ export type Weather = {
   rain?: Record<string, number>;
 };
 
+export type SiteActivation = {
+  id: string;
+  user_id: string;
+  subscription_type: "monthly" | "quarterly" | "yearly";
+  start_date: string;
+  end_date: string;
+  status: string;
+  created_by?: string | null;
+  created_at?: string;
+};
+
 export type AdminUser = {
   id: string;
   email: string;
@@ -266,6 +277,30 @@ export const api = {
     );
     if (!res.ok) throw new Error(await res.text());
     return res.json();
+  },
+  // Site activation subscriptions (admin-only upstream endpoints).
+  siteActivations: () =>
+    authed<{ activations: SiteActivation[]; count: number }>(
+      "/api/admin/site/activations",
+    ),
+  activateSite: async (
+    userId: string,
+    subscriptionType: "monthly" | "quarterly" | "yearly",
+  ) => {
+    const token = await storage.secureGet<string>(TOKEN_KEY, "");
+    const res = await fetch(`${API_BASE}/api/admin/site/activate`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        subscription_type: subscriptionType,
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{ success: boolean; activation: SiteActivation }>;
   },
 
   // Server-generated file exports; caller downloads binary via the URL.

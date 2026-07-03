@@ -224,6 +224,18 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         ) : null}
 
+        {user?.role === "admin" ? (
+          <TouchableOpacity
+            testID="open-admin-activations"
+            style={styles.linkBtn}
+            onPress={() => router.push("/admin/activations")}
+          >
+            <Ionicons name="flash-outline" size={18} color={colors.eco} />
+            <Text style={styles.linkBtnText}>Site activations</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity
           testID="logout-button"
           style={styles.logoutBtn}

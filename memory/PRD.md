@@ -81,6 +81,14 @@ Buttons on Device Detail (per-device) and Reports tab (fleet-wide) fetch the ser
 - **On-demand button** in the mobile app (Device Detail + Reports tab) opens an `EmailReportSheet` bottom sheet where the user picks recipient + attachments and taps Send. Verified in the UI test with the sub-user's account round-tripped through Mongo.
 - SendGrid API key placeholder in `backend/.env`; SPF/DKIM setup is documented at `/app/EMAIL_SETUP.md`.
 
+## Admin — Site Activations
+- `/app/frontend/app/admin/activations.tsx` — admin-only, reachable from Profile → "Site activations".
+- Calls upstream:
+  - `GET /api/admin/site/activations`
+  - `POST /api/admin/site/activate` with `{user_id, subscription_type: "monthly"|"quarterly"|"yearly"}`
+- Merges the activations list with the user list, picks the latest end-date per user, and shows a per-customer card with plan / start / end + a countdown status pill (Active / ≤14d / Expired / Not activated).
+- "Activate site" / "Renew or upgrade" button opens a bottom-sheet with three plans (`+30d`, `+90d`, `+365d`). Tap → POST → refresh + success toast. Admin's own row is filtered out so you can't self-subscribe.
+
 ## Admin — Manage Users
 - `/app/frontend/app/admin/users.tsx` — full-screen route, reachable from Profile only when `user.role === "admin"`.
 - Talks DIRECTLY to the upstream endpoints:
