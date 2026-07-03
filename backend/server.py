@@ -204,7 +204,14 @@ async def _poller_loop() -> None:
     while True:
         try:
             cursor = db.push_users.find(
-                {"envirolytics_token": {"$exists": True, "$ne": None}}
+                {"envirolytics_token": {"$exists": True, "$ne": None}},
+                {
+                    "_id": 0,
+                    "user_id": 1,
+                    "envirolytics_token": 1,
+                    "known_offline": 1,
+                    "known_breaches": 1,
+                },
             )
             async for user in cursor:
                 await _poll_user(user)
@@ -335,7 +342,17 @@ async def _send_scheduled_reports(cadence: str) -> None:
         "envirolytics_token": {"$exists": True, "$ne": None},
         f"subscriptions.{cadence}": True,
     }
-    async for user in db.push_users.find(query):
+    async for user in db.push_users.find(
+        query,
+        {
+            "_id": 0,
+            "user_id": 1,
+            "email": 1,
+            "user_email": 1,
+            "envirolytics_token": 1,
+            "full_name": 1,
+        },
+    ):
         email = user.get("email") or user.get("user_email")
         if not email:
             continue
@@ -377,7 +394,8 @@ async def _auto_deactivate_expired_users() -> None:
         {
             "envirolytics_token": {"$exists": True, "$ne": None},
             "$or": [{"role": "admin"}, {"is_admin": True}],
-        }
+        },
+        {"_id": 0, "user_id": 1, "envirolytics_token": 1},
     )
     handled = 0
     async for adm in admins:

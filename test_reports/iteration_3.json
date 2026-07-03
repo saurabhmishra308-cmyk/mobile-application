@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 3 regression pass on the three config-only fixes (theme.ts env-based API_BASE, app.json googleServicesFile removal, backend MongoDB projections in three background tasks). Backend: 7/7 pytest cases PASS in /app/backend/tests/test_regression_iter3.py — /api/health 200, /api/register-push accepts the new optional `role` field on RegisterPushBody without 422 (returns 500 because EMERGENT_PUSH_KEY is a placeholder, which is expected), /api/register-push still 422s when device_token missing, /api/email-subscriptions POST→GET round-trip preserves weekly:true and monthly:true independently, /api/admin/run-auto-deactivate returns 200 {status:scheduled} and the background task completes cleanly (backend log shows 'auto-deactivate cycle handled 0 user(s)' — the projected admin cursor iterated without KeyError). No exceptions in /var/log/supervisor/backend.err.log. Frontend (390x844, https://field-data-viewer.preview.emergentagent.com): login-form renders with the full animated LoginScene, no red screen from the theme.ts change; admin@envirolytics.com / Admin@Envirolytics2026 signs in and navigates to /dashboard (Instruments 4 · DWLR 2 · Flowmeter 2 · Live weather 36.4°C Lucknow). Bottom tab bar shows all five tabs (Dashboard/Devices/Reports/Alerts/Profile) and every tab route renders with no ReferenceError/Uncaught in body text. Profile shows Envirolytics Admin / admin@envirolytics.com / ADMIN badge / Lucknow HQ / 26.8467, 80.9462 and the two admin links (Manage users + Site activations). Manage Users screen loads via API_BASE (now sourced from EXPO_PUBLIC_ENVIROLYTICS_URL) — shows 2 users (Envirolytics Admin ACTIVE, Map Test Client INACTIVE) with counters 2 USERS / 1 ACTIVE / 0 EXPIRING / 0 EXPIRED, proving the env-based URL resolution round-trips against monitor.envirolytics.in. Site Activations loads and displays 1 activation card (Map Test Client · YEARLY · 365D LEFT · 03 Jul 2026 → 03 Jul 2027). No red screen anywhere. All three config-only fixes are non-regressive. Deprecated packages detected: none. SafeAreaView issues detected: none.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter3.py",
+    "/app/test_reports/pytest/iter3_results.xml"
+  ],
+  "action_items": [
+    "No action items from this regression pass — all three fixes verified.",
+    "(Carryover from iteration 2, unrelated to this pass) app/device/[id].tsx `chartMeta` ReferenceError and DWLR chartData still need the fix if not already applied — this iteration did not re-exercise the device-detail screen because it was out of scope for the config-only regression."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py projections in _poller_loop, _send_scheduled_reports, and _auto_deactivate_expired_users correctly include `_id: 0` plus every field consumed later (user_id, envirolytics_token, known_offline/known_breaches for the poller; user_id + email + user_email + envirolytics_token + full_name for the scheduled reports; user_id + envirolytics_token for the auto-deactivate admin cursor). No downstream .get() would raise KeyError because dict.get() returns None for missing keys, and the code guards on `if not email` / `if not token`.",
+    "frontend/src/theme.ts fallback `https://monitor.envirolytics.in` matches the value already written to EXPO_PUBLIC_ENVIROLYTICS_URL in frontend/.env, so behavior is identical in dev and in a fresh EAS build without the env plumbed through — safe.",
+    "frontend/app.json cleanly drops `expo.android.googleServicesFile` while retaining the `expo-notifications` plugin; EAS will no longer 400 on a missing google-services.json. expo-notifications on Android without FCM config will fall back to Expo's push service, which is what the backend already relays to via integrations.emergentagent.com."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter3.py (new — 7 pytest cases for the three fixes)"
+  ],
+  "success_rate": {
+    "backend": "7/7 (100%)",
+    "frontend": "9/9 regression scenarios PASS (login screen render, credential login, dashboard load, 5-tab render, Profile admin badge + links, Manage Users load via env API_BASE, Site Activations load, no red screen post-theme.ts, all API integrations green)"
+  },
+  "seed_data_creation": "Created and torn down a single TEST_regr_* push_users document during the /api/email-subscriptions round-trip. No production data touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Regression tests live in /app/backend/tests/test_regression_iter3.py — run via `pytest backend/tests/test_regression_iter3.py -v`. Placeholder EMERGENT_PUSH_KEY causes /api/register-push to return HTTP 500 on the real push relay; the test asserts status_code != 422 so it stays green regardless of push-key state. Prod admin creds (admin@envirolytics.com / Admin@Envirolytics2026) remain valid against monitor.envirolytics.in and the env-driven API_BASE resolves correctly from EXPO_PUBLIC_ENVIROLYTICS_URL. Note: device-detail chartMeta issue reported in iteration_2 was NOT re-tested in this pass (out of scope for config-only regression).",
+  "rca_of_issue": "N/A — no defects observed in this iteration."
+}
