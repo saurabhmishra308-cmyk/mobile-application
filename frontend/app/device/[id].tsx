@@ -106,11 +106,24 @@ export default function DeviceDetail() {
   }, [load, hours]);
 
   const chartData = useMemo(() => {
-    if (kind !== "flowmeter") return [];
+    if (kind === "flowmeter") {
+      return history
+        .map((r: FlowmeterReading) => {
+          const ts = readingTs(r);
+          const v = pickReadingValue(r, ["flow_rate", "rate", "flow", "flowrate"]);
+          if (!ts || v === null) return null;
+          const t = new Date(ts).getTime();
+          if (Number.isNaN(t)) return null;
+          return { t, v };
+        })
+        .filter((p): p is { t: number; v: number } => !!p)
+        .sort((a, b) => a.t - b.t);
+    }
+    // DWLR — plot water level.
     return history
-      .map((r: FlowmeterReading) => {
+      .map((r: Record<string, any>) => {
         const ts = readingTs(r);
-        const v = pickReadingValue(r, ["flow_rate", "rate", "flow", "flowrate"]);
+        const v = pickReadingValue(r, ["water_level", "level", "depth"]);
         if (!ts || v === null) return null;
         const t = new Date(ts).getTime();
         if (Number.isNaN(t)) return null;
@@ -119,6 +132,14 @@ export default function DeviceDetail() {
       .filter((p): p is { t: number; v: number } => !!p)
       .sort((a, b) => a.t - b.t);
   }, [history, kind]);
+
+  const chartMeta = useMemo(
+    () =>
+      kind === "dwlr"
+        ? { title: "WATER LEVEL", color: colors.water, unit: " m" }
+        : { title: "FLOW RATE", color: colors.eco, unit: " m³/h" },
+    [kind],
+  );
 
   const chartWidth = Dimensions.get("window").width - spacing.lg * 2 - spacing.lg * 2;
 
