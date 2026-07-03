@@ -6,7 +6,13 @@ import * as Device from "expo-device";
 
 import { registerPushOnBackend } from "@/src/api/client";
 
-export async function registerForPush(userId: string, envirolyticsToken?: string) {
+export async function registerForPush(
+  userId: string,
+  envirolyticsToken?: string,
+  email?: string,
+  fullName?: string,
+  role?: string,
+) {
   try {
     if (Platform.OS === "web") return;
     if (!Device.isDevice) return; // simulator / emulator
@@ -27,6 +33,9 @@ export async function registerForPush(userId: string, envirolyticsToken?: string
       platform: Platform.OS,
       device_token: String(tokenResp.data),
       envirolytics_token: envirolyticsToken,
+      email,
+      full_name: fullName,
+      role,
     });
   } catch {
     // Non-fatal: push isn't required for the app to work in Expo Go.

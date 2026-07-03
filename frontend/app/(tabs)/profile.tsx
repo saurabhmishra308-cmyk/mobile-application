@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,17 +6,79 @@ import {
   ScrollView,
   TouchableOpacity,
   Linking,
+  Switch,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { useAuth } from "@/src/context/AuthContext";
+import {
+  getAuthToken,
+  getEmailSubscription,
+  setEmailSubscription,
+} from "@/src/api/client";
 import { colors, radius, spacing } from "@/src/theme";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const [weekly, setWeekly] = useState(false);
+  const [monthly, setMonthly] = useState(false);
+  const [subLoading, setSubLoading] = useState(true);
+  const [subSaving, setSubSaving] = useState<"weekly" | "monthly" | null>(null);
+  const [subNote, setSubNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (!user?.id) return;
+      try {
+        const s = await getEmailSubscription(user.id);
+        setWeekly(!!s.weekly);
+        setMonthly(!!s.monthly);
+      } catch {}
+      setSubLoading(false);
+    })();
+  }, [user?.id]);
+
+  const persist = useCallback(
+    async (nextWeekly: boolean, nextMonthly: boolean, cadence: "weekly" | "monthly") => {
+      if (!user?.id || !user.email) return;
+      setSubSaving(cadence);
+      setSubNote(null);
+      try {
+        const token = await getAuthToken();
+        if (!token) throw new Error("Please sign in again to update subscriptions.");
+        await setEmailSubscription({
+          user_id: user.id,
+          email: user.email,
+          envirolytics_token: token,
+          full_name: user.full_name,
+          weekly: nextWeekly,
+          monthly: nextMonthly,
+        });
+        setSubNote("Preferences saved.");
+      } catch (e: any) {
+        // Revert the toggle on failure.
+        if (cadence === "weekly") setWeekly(!nextWeekly);
+        else setMonthly(!nextMonthly);
+        setSubNote(e?.message || "Could not save.");
+      } finally {
+        setSubSaving(null);
+      }
+    },
+    [user?.id, user?.email, user?.full_name],
+  );
+
+  const onToggleWeekly = (v: boolean) => {
+    setWeekly(v);
+    persist(v, monthly, "weekly");
+  };
+  const onToggleMonthly = (v: boolean) => {
+    setMonthly(v);
+    persist(weekly, v, "monthly");
+  };
 
   const onLogout = useCallback(async () => {
     await signOut();
@@ -89,6 +151,57 @@ export default function ProfileScreen() {
           </Section>
         ) : null}
 
+        <Section title="Email Reports · Pro">
+          <View style={styles.subRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subTitle}>Weekly report</Text>
+              <Text style={styles.subSub}>
+                Every Monday 6:00 AM IST · CSV + PDF for last 7 days
+              </Text>
+            </View>
+            {subLoading ? (
+              <ActivityIndicator color={colors.eco} size="small" />
+            ) : (
+              <Switch
+                testID="sub-weekly-toggle"
+                value={weekly}
+                onValueChange={onToggleWeekly}
+                disabled={subSaving === "weekly"}
+                trackColor={{ false: colors.border, true: "rgba(16,185,129,0.6)" }}
+                thumbColor={weekly ? colors.eco : "#f4f3f4"}
+              />
+            )}
+          </View>
+          <View style={styles.subRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.subTitle}>Monthly report</Text>
+              <Text style={styles.subSub}>
+                1st of each month 6:00 AM IST · CSV + PDF for last 30 days
+              </Text>
+            </View>
+            {subLoading ? (
+              <ActivityIndicator color={colors.eco} size="small" />
+            ) : (
+              <Switch
+                testID="sub-monthly-toggle"
+                value={monthly}
+                onValueChange={onToggleMonthly}
+                disabled={subSaving === "monthly"}
+                trackColor={{ false: colors.border, true: "rgba(16,185,129,0.6)" }}
+                thumbColor={monthly ? colors.eco : "#f4f3f4"}
+              />
+            )}
+          </View>
+          {subNote ? (
+            <Text style={styles.subNote} testID="sub-note">
+              {subNote}
+            </Text>
+          ) : null}
+          <Text style={styles.subFooter}>
+            Sent from info@envirolytics.in to {user?.email || "your account email"}.
+          </Text>
+        </Section>
+
         <TouchableOpacity
           testID="open-web-link"
           style={styles.linkBtn}
@@ -98,6 +211,18 @@ export default function ProfileScreen() {
           <Text style={styles.linkBtnText}>Open monitor.envirolytics.in</Text>
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </TouchableOpacity>
+
+        {user?.role === "admin" ? (
+          <TouchableOpacity
+            testID="open-admin-users"
+            style={styles.linkBtn}
+            onPress={() => router.push("/admin/users")}
+          >
+            <Ionicons name="shield-checkmark-outline" size={18} color={colors.eco} />
+            <Text style={styles.linkBtnText}>Manage users</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        ) : null}
 
         <TouchableOpacity
           testID="logout-button"
@@ -246,5 +371,29 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5,
     textAlign: "center",
     marginTop: spacing.md,
+  },
+  subRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  subTitle: { color: colors.text, fontSize: 13, fontWeight: "700" },
+  subSub: { color: colors.textSecondary, fontSize: 11, marginTop: 2 },
+  subNote: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    color: colors.eco,
+    fontSize: 11.5,
+  },
+  subFooter: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    color: colors.textMuted,
+    fontSize: 10.5,
+    letterSpacing: 0.6,
   },
 });

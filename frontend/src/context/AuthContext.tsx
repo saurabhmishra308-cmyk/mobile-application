@@ -50,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const me = await api.me();
           await storage.setItem(USER_KEY, JSON.stringify(me));
           setUser(me);
-          registerForPush(me.id, t);
+          registerForPush(me.id, t, me.email, me.full_name, me.role);
         } catch {}
       }
     })();
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await storage.setItem(USER_KEY, JSON.stringify(profile));
     setUser(profile);
     // Fire-and-forget push registration on native builds.
-    registerForPush(profile.id, res.access_token);
+    registerForPush(profile.id, res.access_token, profile.email, profile.full_name, profile.role);
     return profile;
   }, []);
 

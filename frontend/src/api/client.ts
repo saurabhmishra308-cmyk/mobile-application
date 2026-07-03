@@ -139,6 +139,23 @@ export type Weather = {
   rain?: Record<string, number>;
 };
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  username?: string | null;
+  full_name: string;
+  company_name?: string | null;
+  phone?: string | null;
+  role: string;
+  is_active: boolean;
+  location_name?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  created_at: string;
+  created_by?: string | null;
+  permissions?: Record<string, boolean>;
+};
+
 // ---------- Endpoints ----------
 export const api = {
   me: () => authed<UserProfile>("/api/auth/me"),
@@ -215,6 +232,42 @@ export const api = {
         hardwareId,
       )}&days=${days}`,
     ),
+  // Admin — user management (upstream is monitor.envirolytics.in).
+  adminUsersList: () =>
+    authed<{ users: AdminUser[]; count?: number }>("/api/admin/users/list"),
+  setUserStatus: async (userId: string, isActive: boolean) => {
+    const token = await storage.secureGet<string>(TOKEN_KEY, "");
+    const res = await fetch(
+      `${API_BASE}/api/admin/users/${encodeURIComponent(userId)}/status?is_active=${isActive}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      },
+    );
+    if (!res.ok) {
+      const t = await res.text();
+      throw new Error(t || `HTTP ${res.status}`);
+    }
+    return res.json();
+  },
+  deleteUser: async (userId: string) => {
+    const token = await storage.secureGet<string>(TOKEN_KEY, "");
+    const res = await fetch(
+      `${API_BASE}/api/admin/users/${encodeURIComponent(userId)}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      },
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  },
+
   // Server-generated file exports; caller downloads binary via the URL.
   exportUrl: (params: {
     instrument_type: "dwlr" | "flowmeter";
@@ -231,12 +284,15 @@ export const api = {
   },
 };
 
-// ---------- Our own backend (push relay) ----------
+// ---------- Our own backend (push relay + email) ----------
 export async function registerPushOnBackend(body: {
   user_id: string;
   platform: string;
   device_token: string;
   envirolytics_token?: string;
+  email?: string;
+  full_name?: string;
+  role?: string;
 }) {
   if (!OWN_BACKEND_URL) throw new Error("EXPO_PUBLIC_BACKEND_URL not set");
   const res = await fetch(`${OWN_BACKEND_URL}/api/register-push`, {
@@ -261,6 +317,74 @@ export async function unregisterPushOnBackend(user_id: string) {
   } catch {
     /* best effort */
   }
+}
+
+export type EmailKind =
+  | "flowmeter_csv"
+  | "flowmeter_pdf"
+  | "dwlr_csv"
+  | "dwlr_pdf";
+
+async function ownBackend<T>(
+  path: string,
+  init: RequestInit,
+): Promise<T> {
+  if (!OWN_BACKEND_URL) throw new Error("EXPO_PUBLIC_BACKEND_URL not set");
+  const res = await fetch(`${OWN_BACKEND_URL}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  const text = await res.text();
+  let body: any = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+  if (!res.ok) {
+    const detail =
+      (body && (body.detail || body.message)) || `HTTP ${res.status}`;
+    throw new Error(
+      typeof detail === "string" ? detail : JSON.stringify(detail),
+    );
+  }
+  return body as T;
+}
+
+export async function emailReport(body: {
+  recipient: string;
+  envirolytics_token: string;
+  kinds: EmailKind[];
+  hardware_id?: string;
+  days?: number;
+  subject?: string;
+  note?: string;
+}) {
+  return ownBackend<{ status: string; recipient: string; count: number }>(
+    "/api/email-report",
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export async function setEmailSubscription(body: {
+  user_id: string;
+  email: string;
+  envirolytics_token: string;
+  full_name?: string;
+  weekly: boolean;
+  monthly: boolean;
+}) {
+  return ownBackend<{ status: string; weekly: boolean; monthly: boolean }>(
+    "/api/email-subscriptions",
+    { method: "POST", body: JSON.stringify(body) },
+  );
+}
+
+export async function getEmailSubscription(user_id: string) {
+  return ownBackend<{ weekly: boolean; monthly: boolean; email?: string }>(
+    `/api/email-subscriptions/${encodeURIComponent(user_id)}`,
+    { method: "GET" },
+  );
 }
 
 export async function getAuthToken() {

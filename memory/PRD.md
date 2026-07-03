@@ -72,5 +72,32 @@ Buttons on Device Detail (per-device) and Reports tab (fleet-wide) fetch the ser
 - Tap handlers route to `/(tabs)/alerts` (via `action_url`).
 - **Won't fire in Expo Go**; requires an EAS build. Android additionally requires `google-services.json` at `frontend/google-services.json` (user-provided) before the build is generated. `EMERGENT_PUSH_KEY` in `backend/.env` is set to `placeholder` — the deployer replaces it during publish.
 
+## Email delivery (SendGrid, from info@envirolytics.in)
+- Backend `POST /api/email-report` fetches the CSV/PDF from the upstream and sends via SendGrid with attachments.
+- `POST /api/email-subscriptions` stores per-user preferences `{weekly, monthly}`.
+- APScheduler in the FastAPI lifespan runs:
+  - `_send_scheduled_reports("weekly")` every Monday 06:00 IST
+  - `_send_scheduled_reports("monthly")` on the 1st at 06:00 IST
+- **On-demand button** in the mobile app (Device Detail + Reports tab) opens an `EmailReportSheet` bottom sheet where the user picks recipient + attachments and taps Send. Verified in the UI test with the sub-user's account round-tripped through Mongo.
+- SendGrid API key placeholder in `backend/.env`; SPF/DKIM setup is documented at `/app/EMAIL_SETUP.md`.
+
+## Admin — Manage Users
+- `/app/frontend/app/admin/users.tsx` — full-screen route, reachable from Profile only when `user.role === "admin"`.
+- Talks DIRECTLY to the upstream endpoints:
+  - `GET /api/admin/users/list`
+  - `PUT /api/admin/users/{id}/status?is_active=true|false`
+- UI: stat strip (Total / Active / Expiring / Expired), filter chips (All / Active / Inactive / Expiring / Expired), search, per-user card with:
+  - Status pill (Active / Inactive / Expiring / Expired)
+  - Age-since-creation + countdown to auto-expiry
+  - Toggle switch that PUTs upstream `.../status`
+- Guards the admin from deactivating their own account.
+- **365-day auto-deactivate cron** — `_auto_deactivate_expired_users()` runs daily at 03:00 IST. Fetches the upstream user list with a registered admin's stored `envirolytics_token`, computes days-since-`created_at`, and deactivates any non-admin whose age ≥ 365 days. Admins are always skipped so the tenant is never locked out. Can be triggered on-demand at `POST /api/admin/run-auto-deactivate`.
+
+## Domain / deep-link setup
+Step-by-step guide at `/app/DOMAIN_SETUP.md` — covers the DNS CNAME for
+`mobileapp.envirolytics.in`, attaching the subdomain during Emergent Publish,
+and hosting `apple-app-site-association` + `assetlinks.json` under
+`/.well-known/` so iOS Universal Links & Android App Links open the app.
+
 ## Testing credentials
 See `/app/memory/test_credentials.md`.

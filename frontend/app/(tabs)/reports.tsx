@@ -12,11 +12,12 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { LineChart } from "@/src/components/LineChart";
-import { api, Instrument } from "@/src/api/client";
+import { api, Instrument, EmailKind } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors, radius, spacing, font } from "@/src/theme";
 import { fmtNum } from "@/src/utils/format";
 import { downloadAndShare } from "@/src/utils/download";
+import { EmailReportSheet } from "@/src/components/EmailReportSheet";
 
 const RANGE_OPTIONS = [
   { days: 7, label: "7d" },
@@ -25,7 +26,7 @@ const RANGE_OPTIONS = [
 ] as const;
 
 export default function ReportsScreen() {
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const [days, setDays] = useState<number>(7);
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [consumption, setConsumption] = useState<{
@@ -40,6 +41,11 @@ export default function ReportsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [downloading, setDownloading] = useState<null | "csv-fm" | "csv-dwlr" | "pdf-fm" | "pdf-dwlr">(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailInitialKinds, setEmailInitialKinds] = useState<EmailKind[]>([
+    "flowmeter_csv",
+    "flowmeter_pdf",
+  ]);
 
   const flowmeters = useMemo(
     () => instruments.filter((i) => i.instrument_type === "flowmeter"),
@@ -322,9 +328,35 @@ export default function ReportsScreen() {
                 {downloadNote}
               </Text>
             ) : null}
+
+            <TouchableOpacity
+              testID="reports-email-button"
+              style={styles.emailBtn}
+              activeOpacity={0.85}
+              onPress={() => {
+                setEmailInitialKinds([
+                  "flowmeter_csv",
+                  "flowmeter_pdf",
+                  "dwlr_csv",
+                  "dwlr_pdf",
+                ]);
+                setEmailOpen(true);
+              }}
+            >
+              <Ionicons name="mail-outline" size={16} color="#fff" />
+              <Text style={styles.emailBtnText}>Send report by email</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       )}
+      <EmailReportSheet
+        visible={emailOpen}
+        onClose={() => setEmailOpen(false)}
+        defaultRecipient={user?.email}
+        initialKinds={emailInitialKinds}
+        days={days}
+        subject={`Envirolytics · ${days}-day compliance report`}
+      />
     </View>
   );
 }
@@ -520,5 +552,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
     textAlign: "center",
   },
+  emailBtn: {
+    marginTop: spacing.md,
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: colors.water,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+    shadowColor: colors.water,
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  emailBtnText: { color: "#fff", fontWeight: "800", fontSize: 14, letterSpacing: 0.3 },
   emptyText: { color: colors.textMuted, fontSize: 12, textAlign: "center", paddingVertical: 12 },
 });

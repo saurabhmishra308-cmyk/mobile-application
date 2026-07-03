@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { StatusPill } from "@/src/components/StatusPill";
 import { LineChart } from "@/src/components/LineChart";
-import { api, FlowmeterReading } from "@/src/api/client";
+import { api, EmailKind, FlowmeterReading } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors, radius, spacing, font } from "@/src/theme";
 import {
@@ -27,13 +27,14 @@ import {
   readingTs,
 } from "@/src/utils/format";
 import { downloadAndShare } from "@/src/utils/download";
+import { EmailReportSheet } from "@/src/components/EmailReportSheet";
 
 const HOUR_OPTIONS = [6, 24, 72, 168] as const;
 
 export default function DeviceDetail() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
   const { id, type, label, location } = useLocalSearchParams<{
     id: string;
     type?: string;
@@ -52,6 +53,7 @@ export default function DeviceDetail() {
   const [refreshing, setRefreshing] = useState(false);
   const [downloadingKind, setDownloadingKind] = useState<null | "csv" | "pdf">(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
+  const [emailOpen, setEmailOpen] = useState(false);
 
   const load = useCallback(
     async (hrs: number = hours) => {
@@ -398,6 +400,15 @@ export default function DeviceDetail() {
                 {downloadNote}
               </Text>
             ) : null}
+            <TouchableOpacity
+              testID="detail-email-button"
+              style={styles.emailBtn}
+              activeOpacity={0.85}
+              onPress={() => setEmailOpen(true)}
+            >
+              <Ionicons name="mail-outline" size={16} color="#fff" />
+              <Text style={styles.emailBtnText}>Send by email</Text>
+            </TouchableOpacity>
           </View>
 
           <View style={styles.detailCard}>
@@ -424,6 +435,18 @@ export default function DeviceDetail() {
           </View>
         </ScrollView>
       )}
+      <EmailReportSheet
+        visible={emailOpen}
+        onClose={() => setEmailOpen(false)}
+        defaultRecipient={user?.email}
+        initialKinds={
+          kind === "dwlr"
+            ? (["dwlr_csv", "dwlr_pdf"] as EmailKind[])
+            : (["flowmeter_csv", "flowmeter_pdf"] as EmailKind[])
+        }
+        hardwareId={hardwareId}
+        subject={`Envirolytics · ${label || hardwareId} report`}
+      />
     </View>
   );
 }
@@ -638,4 +661,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginTop: spacing.sm,
   },
+  emailBtn: {
+    marginTop: spacing.md,
+    height: 46,
+    borderRadius: 999,
+    backgroundColor: colors.water,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 6,
+  },
+  emailBtnText: { color: "#fff", fontWeight: "800", fontSize: 14, letterSpacing: 0.3 },
 });
