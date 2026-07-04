@@ -19,6 +19,8 @@ import { api, EmailKind, FlowmeterReading } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors, radius, spacing, font } from "@/src/theme";
 import {
+  DIAGNOSTIC_STRING_KEYS,
+  READING_KEYS,
   fmtDateTime,
   fmtNum,
   fromNow,
@@ -112,7 +114,7 @@ export default function DeviceDetail() {
       return history
         .map((r: FlowmeterReading) => {
           const ts = readingTs(r);
-          const v = pickReadingValue(r, ["flow_rate", "rate", "flow", "flowrate"]);
+          const v = pickReadingValue(r, [...READING_KEYS.flowRate]);
           if (!ts || v === null) return null;
           const t = new Date(ts).getTime();
           if (Number.isNaN(t)) return null;
@@ -125,7 +127,7 @@ export default function DeviceDetail() {
     return history
       .map((r: Record<string, any>) => {
         const ts = readingTs(r);
-        const v = pickReadingValue(r, ["water_level", "level", "depth"]);
+        const v = pickReadingValue(r, [...READING_KEYS.waterLevel]);
         if (!ts || v === null) return null;
         const t = new Date(ts).getTime();
         if (Number.isNaN(t)) return null;
@@ -152,7 +154,7 @@ export default function DeviceDetail() {
         {
           label: "Flow Rate",
           key: "flow",
-          value: pickReadingValue(latest, ["flow_rate", "rate", "flow", "flowrate"]),
+          value: pickReadingValue(latest, [...READING_KEYS.flowRate]),
           unit: "m³/h",
           icon: "speedometer-outline" as const,
           color: colors.eco,
@@ -160,12 +162,7 @@ export default function DeviceDetail() {
         {
           label: "Totalizer",
           key: "totalizer",
-          value: pickReadingValue(latest, [
-            "totalizer",
-            "totaliser",
-            "cumulative_flow",
-            "total",
-          ]),
+          value: pickReadingValue(latest, [...READING_KEYS.totalizer]),
           unit: "m³",
           icon: "layers-outline" as const,
           color: colors.water,
@@ -173,7 +170,7 @@ export default function DeviceDetail() {
         {
           label: "Battery",
           key: "battery",
-          value: pickReadingValue(latest, ["battery", "battery_v", "bat"]),
+          value: pickReadingValue(latest, [...READING_KEYS.battery]),
           unit: "V",
           icon: "battery-half-outline" as const,
           color: colors.warning,
@@ -184,7 +181,7 @@ export default function DeviceDetail() {
       {
         label: "Water Level",
         key: "level",
-        value: pickReadingValue(latest, ["water_level", "level", "depth"]),
+        value: pickReadingValue(latest, [...READING_KEYS.waterLevel]),
         unit: "m",
         icon: "water-outline" as const,
         color: colors.water,
@@ -192,7 +189,7 @@ export default function DeviceDetail() {
       {
         label: "Temperature",
         key: "temp",
-        value: pickReadingValue(latest, ["temperature", "temp"]),
+        value: pickReadingValue(latest, [...READING_KEYS.waterTemp]),
         unit: "°C",
         icon: "thermometer-outline" as const,
         color: colors.warning,
@@ -200,13 +197,29 @@ export default function DeviceDetail() {
       {
         label: "Battery",
         key: "battery",
-        value: pickReadingValue(latest, ["battery", "battery_v", "bat"]),
+        value: pickReadingValue(latest, [...READING_KEYS.battery]),
         unit: "V",
         icon: "battery-half-outline" as const,
         color: colors.eco,
       },
     ];
   }, [latest, kind]);
+
+  // Feed-health: how long since the backend last stamped a reading?
+  const feedHealth = useMemo(() => {
+    const ts = lastSeen ? new Date(lastSeen).getTime() : NaN;
+    if (Number.isNaN(ts)) {
+      return { label: "No data", color: colors.textMuted, minutes: null as number | null };
+    }
+    const minutes = Math.round((Date.now() - ts) / 60_000);
+    if (minutes < 15) return { label: "Live", color: colors.eco, minutes };
+    if (minutes < 60) return { label: "Recent", color: colors.eco, minutes };
+    if (minutes < 60 * 6) return { label: "Delayed", color: colors.warning, minutes };
+    return { label: "Stale", color: colors.danger, minutes };
+  }, [lastSeen]);
+
+  const signalValue = latest ? pickReadingValue(latest, [...READING_KEYS.signal]) : null;
+  const firmware = latest ? String(latest.VER || latest.firmware || "") : "";
 
   return (
     <View style={styles.safe} testID="device-detail-screen">
@@ -291,6 +304,35 @@ export default function DeviceDetail() {
                 </View>
               </View>
             ))}
+          </View>
+
+          {/* Data-feed health — quickly confirms backend ingestion.  */}
+          <View style={styles.feedCard} testID="detail-feed-health">
+            <View style={styles.feedRow}>
+              <View
+                style={[
+                  styles.feedDot,
+                  { backgroundColor: feedHealth.color },
+                ]}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.feedTitle}>Data Feed · {feedHealth.label}</Text>
+                <Text style={styles.feedSub}>
+                  {feedHealth.minutes === null
+                    ? "Backend has not received any reading from this device."
+                    : `Backend received last packet ${fromNow(lastSeen)} (${feedHealth.minutes} min ago).`}
+                </Text>
+              </View>
+              {signalValue !== null ? (
+                <View style={styles.signalPill}>
+                  <Ionicons name="cellular-outline" size={12} color={colors.textSecondary} />
+                  <Text style={styles.signalText}>{signalValue}</Text>
+                </View>
+              ) : null}
+            </View>
+            {firmware ? (
+              <Text style={styles.feedFirmware}>Firmware · {firmware}</Text>
+            ) : null}
           </View>
 
           {/* Chart card (flowmeter → flow rate; DWLR → water level) */}
@@ -433,6 +475,26 @@ export default function DeviceDetail() {
               <Text style={styles.emptyText}>No readings received yet from this device.</Text>
             )}
           </View>
+
+          {latest ? (
+            <View style={styles.detailCard} testID="detail-diagnostics">
+              <Text style={styles.detailTitle}>Device Diagnostics</Text>
+              {DIAGNOSTIC_STRING_KEYS.filter(({ key }) => {
+                const v = latest?.[key];
+                return v !== null && v !== undefined && v !== "";
+              }).map(({ key, label }) => (
+                <DetailRow key={key} label={label} value={String(latest[key])} />
+              ))}
+              {DIAGNOSTIC_STRING_KEYS.every(({ key }) => {
+                const v = latest?.[key];
+                return v === null || v === undefined || v === "";
+              }) ? (
+                <Text style={styles.emptyText}>
+                  No firmware diagnostics reported for this device.
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
         </ScrollView>
       )}
       <EmailReportSheet
@@ -559,6 +621,44 @@ const styles = StyleSheet.create({
     fontFamily: font.mono,
   },
   metricUnit: { color: colors.textSecondary, fontSize: 11, fontFamily: font.mono },
+
+  feedCard: {
+    padding: spacing.md,
+    backgroundColor: colors.bgElevated,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  feedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+  },
+  feedDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  feedTitle: { color: colors.text, fontSize: 13, fontWeight: "800" },
+  feedSub: { color: colors.textSecondary, fontSize: 11, marginTop: 2 },
+  feedFirmware: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 8,
+    letterSpacing: 0.4,
+  },
+  signalPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.bg,
+  },
+  signalText: { color: colors.text, fontSize: 11, fontFamily: font.mono },
 
   chartCard: {
     padding: spacing.lg,

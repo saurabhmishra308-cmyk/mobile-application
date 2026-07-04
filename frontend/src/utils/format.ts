@@ -53,8 +53,70 @@ export function pickReadingValue(r: Record<string, any>, keys: string[]): number
   return null;
 }
 
-export function readingTs(r: Record<string, any>): string | null {
-  return (
-    r?.timestamp || r?.ts || r?.received_at || r?.time || r?.created_at || null
-  );
+// New DWLR firmware sends a compact "YYMMDDHHmmss" string (e.g. "260703135219").
+// Detect + convert to ISO so downstream chart / fromNow work uniformly.
+function _parseFirmwareTs(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length !== 12) return null;
+  const yy = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  const dd = digits.slice(4, 6);
+  const HH = digits.slice(6, 8);
+  const MM = digits.slice(8, 10);
+  const SS = digits.slice(10, 12);
+  const year = 2000 + Number(yy);
+  const iso = `${year}-${mm}-${dd}T${HH}:${MM}:${SS}+05:30`; // device is India-local
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+export function readingTs(r: Record<string, any>): string | null {
+  const direct =
+    r?.timestamp || r?.ts || r?.received_at || r?.time || r?.created_at;
+  if (direct) return String(direct);
+  // Firmware-native field name is TIME (uppercase, YYMMDDHHmmss).
+  const fw = _parseFirmwareTs(r?.TIME);
+  if (fw) return fw;
+  return null;
+}
+
+// Central catalogue of reading-field aliases so mobile stays forward-compatible
+// with any new DWLR / flowmeter firmware that renames columns.
+export const READING_KEYS = {
+  waterLevel: [
+    "water_level", "level", "depth",           // legacy
+    "LVL", "RAW", "D_SEN",                      // firmware v2
+  ],
+  waterTemp: [
+    "water_temperature", "wtemp", "temperature", "temp",
+    "WTEMP", "ATEMP",                           // firmware v2 (ATEMP = ambient)
+  ],
+  battery: [
+    "battery", "battery_v", "bat", "voltage",
+    "BVOLT",                                    // firmware v2
+  ],
+  signal: [
+    "signal", "rssi", "signal_strength",
+    "SIGNAL",                                   // firmware v2
+  ],
+  flowRate: [
+    "flow_rate", "rate", "flow", "flowrate",
+  ],
+  totalizer: [
+    "totalizer", "totaliser", "cumulative_flow", "total",
+  ],
+} as const;
+
+// Firmware diagnostic string fields — displayed as-is in device detail.
+export const DIAGNOSTIC_STRING_KEYS: { key: string; label: string }[] = [
+  { key: "VER", label: "Firmware" },
+  { key: "HVER", label: "Hardware Rev" },
+  { key: "IMEI", label: "IMEI" },
+  { key: "IMSI", label: "SIM IMSI" },
+  { key: "GINT", label: "Global Interval" },
+  { key: "SDINT", label: "SD Interval" },
+  { key: "P_SEN", label: "Pressure Sensor" },
+  { key: "APRES", label: "Atm. Pressure" },
+  { key: "E_COM", label: "Comm Error" },
+];

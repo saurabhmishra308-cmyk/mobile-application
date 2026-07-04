@@ -422,6 +422,16 @@ async def _auto_deactivate_expired_users() -> None:
         for u in resp.json().get("users") or []:
             if not u.get("is_active"):
                 continue
+            # ============================================================
+            # ADMIN = GOD MODE. Never expire an admin under any circumstance.
+            # We check both `role` and `is_admin` because upstream schemas
+            # historically flip-flopped between the two.
+            # ============================================================
+            role = (u.get("role") or "").strip().lower()
+            if role in {"admin", "superadmin", "owner", "god"}:
+                continue
+            if u.get("is_admin") is True:
+                continue
             created = u.get("created_at")
             if not created:
                 continue
@@ -431,9 +441,6 @@ async def _auto_deactivate_expired_users() -> None:
                 continue
             days = (now - created_dt).days
             if days < 365:
-                continue
-            # Skip admins so we never lock the last operator out.
-            if (u.get("role") or "").lower() == "admin":
                 continue
             try:
                 await _envirolytics_client.put(

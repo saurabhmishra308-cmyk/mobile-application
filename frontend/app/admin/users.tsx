@@ -83,10 +83,15 @@ export default function AdminUsersScreen() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return users
-      .map((u) => ({ ...u, _days: daysSince(u.created_at) }))
+      .map((u) => {
+        const isAdminUser = (u.role || "").toLowerCase() === "admin";
+        // Admins are GOD mode — never expire.
+        const _days = isAdminUser ? 0 : daysSince(u.created_at);
+        return { ...u, _days, _isAdmin: isAdminUser };
+      })
       .filter((u) => {
-        const expired = u._days >= EXPIRY_DAYS;
-        const expiring = !expired && u._days >= EXPIRY_DAYS - WARNING_DAYS;
+        const expired = !u._isAdmin && u._days >= EXPIRY_DAYS;
+        const expiring = !u._isAdmin && !expired && u._days >= EXPIRY_DAYS - WARNING_DAYS;
         if (filter === "active" && !u.is_active) return false;
         if (filter === "inactive" && u.is_active) return false;
         if (filter === "expired" && !expired) return false;
@@ -103,11 +108,12 @@ export default function AdminUsersScreen() {
   }, [users, filter, query]);
 
   const stats = useMemo(() => {
+    const nonAdmin = users.filter((u) => (u.role || "").toLowerCase() !== "admin");
     const active = users.filter((u) => u.is_active).length;
-    const expired = users.filter(
+    const expired = nonAdmin.filter(
       (u) => daysSince(u.created_at) >= EXPIRY_DAYS,
     ).length;
-    const expiring = users.filter((u) => {
+    const expiring = nonAdmin.filter((u) => {
       const d = daysSince(u.created_at);
       return d < EXPIRY_DAYS && d >= EXPIRY_DAYS - WARNING_DAYS;
     }).length;
@@ -123,6 +129,13 @@ export default function AdminUsersScreen() {
         } else {
           Alert.alert("Not allowed", "You can't deactivate your own account.");
         }
+        return;
+      }
+      // Guard: never deactivate a fellow admin from the mobile app.
+      if ((u.role || "").toLowerCase() === "admin" && u.is_active) {
+        const msg = "Admins are GOD mode — deactivating another admin can lock the tenant. Use the web console.";
+        if (Platform.OS === "web") window.alert(msg);
+        else Alert.alert("Protected account", msg);
         return;
       }
       setBusyId(u.id);
@@ -276,17 +289,31 @@ export default function AdminUsersScreen() {
             </View>
           }
           renderItem={({ item }) => {
+            const isAdminRow = (item.role || "").toLowerCase() === "admin";
             const d = daysSince(item.created_at);
-            const expired = d >= EXPIRY_DAYS;
-            const expiring = !expired && d >= EXPIRY_DAYS - WARNING_DAYS;
+            const expired = !isAdminRow && d >= EXPIRY_DAYS;
+            const expiring = !isAdminRow && !expired && d >= EXPIRY_DAYS - WARNING_DAYS;
             const remaining = Math.max(EXPIRY_DAYS - d, 0);
             return (
               <View
                 style={styles.userCard}
                 testID={`admin-user-${item.id}`}
               >
-                <View style={styles.userAvatar}>
-                  <Text style={styles.userAvatarText}>
+                <View
+                  style={[
+                    styles.userAvatar,
+                    isAdminRow && {
+                      backgroundColor: "rgba(245,158,11,0.14)",
+                      borderColor: "rgba(245,158,11,0.5)",
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.userAvatarText,
+                      isAdminRow && { color: colors.warning },
+                    ]}
+                  >
                     {(item.full_name || item.email || "?")
                       .split(" ")
                       .map((w) => w[0])
@@ -303,22 +330,26 @@ export default function AdminUsersScreen() {
                     <StatusPill
                       testID={`admin-user-status-${item.id}`}
                       label={
-                        expired
-                          ? "Expired"
-                          : !item.is_active
-                            ? "Inactive"
-                            : expiring
-                              ? "Expiring"
-                              : "Active"
+                        isAdminRow
+                          ? "GOD"
+                          : expired
+                            ? "Expired"
+                            : !item.is_active
+                              ? "Inactive"
+                              : expiring
+                                ? "Expiring"
+                                : "Active"
                       }
                       variant={
-                        expired
-                          ? "alert"
-                          : !item.is_active
-                            ? "offline"
-                            : expiring
-                              ? "warning"
-                              : "online"
+                        isAdminRow
+                          ? "warning"
+                          : expired
+                            ? "alert"
+                            : !item.is_active
+                              ? "offline"
+                              : expiring
+                                ? "warning"
+                                : "online"
                       }
                     />
                   </View>
@@ -336,24 +367,33 @@ export default function AdminUsersScreen() {
                         Created {fromNow(item.created_at)}
                       </Text>
                     </View>
-                    <View style={styles.userMetaItem}>
-                      <Ionicons
-                        name={expired ? "close-circle-outline" : "hourglass-outline"}
-                        size={11}
-                        color={expired ? colors.danger : expiring ? colors.warning : colors.textMuted}
-                      />
-                      <Text
-                        style={[
-                          styles.userMeta,
-                          expired && { color: colors.danger },
-                          expiring && { color: colors.warning },
-                        ]}
-                      >
-                        {expired
-                          ? `Past 365d by ${d - EXPIRY_DAYS}d`
-                          : `${remaining}d to auto-expiry`}
-                      </Text>
-                    </View>
+                    {isAdminRow ? (
+                      <View style={styles.userMetaItem}>
+                        <Ionicons name="infinite-outline" size={11} color={colors.warning} />
+                        <Text style={[styles.userMeta, { color: colors.warning }]}>
+                          No expiry · GOD mode
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={styles.userMetaItem}>
+                        <Ionicons
+                          name={expired ? "close-circle-outline" : "hourglass-outline"}
+                          size={11}
+                          color={expired ? colors.danger : expiring ? colors.warning : colors.textMuted}
+                        />
+                        <Text
+                          style={[
+                            styles.userMeta,
+                            expired && { color: colors.danger },
+                            expiring && { color: colors.warning },
+                          ]}
+                        >
+                          {expired
+                            ? `Past 365d by ${d - EXPIRY_DAYS}d`
+                            : `${remaining}d to auto-expiry`}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </View>
                 {busyId === item.id ? (
@@ -363,11 +403,20 @@ export default function AdminUsersScreen() {
                     testID={`admin-toggle-${item.id}`}
                     value={item.is_active}
                     onValueChange={() => onToggle(item)}
+                    disabled={isAdminRow && item.is_active && item.id !== user?.id}
                     trackColor={{
                       false: colors.border,
-                      true: "rgba(16,185,129,0.6)",
+                      true: isAdminRow
+                        ? "rgba(245,158,11,0.55)"
+                        : "rgba(16,185,129,0.6)",
                     }}
-                    thumbColor={item.is_active ? colors.eco : "#f4f3f4"}
+                    thumbColor={
+                      item.is_active
+                        ? isAdminRow
+                          ? colors.warning
+                          : colors.eco
+                        : "#f4f3f4"
+                    }
                   />
                 )}
               </View>
@@ -376,7 +425,7 @@ export default function AdminUsersScreen() {
         />
       )}
       <Text style={styles.footer}>
-        Users are auto-deactivated 365 days after creation. Toggle to override.
+        Non-admin users are auto-deactivated 365 days after creation. Admins are GOD mode — never auto-expired.
       </Text>
     </View>
   );

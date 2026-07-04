@@ -2,29 +2,55 @@
   "expo": {
     "name": "Envirolytics Monitor",
     "slug": "envirolytics-monitor",
-    "version": "1.0.0",
+    "version": "1.0.1",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "envirolytics",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "primaryColor": "#10b981",
+    "backgroundColor": "#0a1420",
+    "privacy": "unlisted",
+    "githubUrl": "",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "in.envirolytics.mobile",
+      "buildNumber": "2",
       "associatedDomains": ["applinks:mobileapp.envirolytics.in"],
+      "config": {
+        "usesNonExemptEncryption": false
+      },
       "infoPlist": {
         "NSAppTransportSecurity": {
           "NSAllowsArbitraryLoads": false
-        }
+        },
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "in.envirolytics.mobile",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#1a2332"
       },
       "edgeToEdgeEnabled": true,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "POST_NOTIFICATIONS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK"
+      ],
+      "blockedPermissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECORD_AUDIO"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -46,7 +72,14 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#10b981",
+          "defaultChannel": "envirolytics-alerts"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -55,10 +88,20 @@
           "resizeMode": "contain",
           "backgroundColor": "#1a2332"
         }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "Allow $(PRODUCT_NAME) to unlock your saved sign-in with Face ID."
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "privacyPolicyUrl": "https://monitor.envirolytics.in/policies",
+      "supportEmail": "info@envirolytics.in"
     }
   }
 }
