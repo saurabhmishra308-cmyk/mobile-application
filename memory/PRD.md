@@ -1,5 +1,15 @@
 # Envirolytics Monitor — Mobile app (Expo, iOS + Android)
 
+
+## Latest changes (v1.0.1)
+- **Admin = GOD mode**: admins are excluded from the 365-day auto-deactivate cron server-side and shown with a golden "GOD · No expiry" badge in Manage Users. UI blocks deactivating a fellow admin. Backend rejects auto-expiry for role in {admin, superadmin, owner, god} or `is_admin: true`.
+- **DWLR firmware v2 aliases**: mobile app now transparently accepts both legacy (`water_level`, `temperature`, `battery`, `timestamp`) and new uppercase firmware fields (`LVL`, `RAW`, `WTEMP`, `ATEMP`, `BVOLT`, `SIGNAL`, `TIME` in YYMMDDHHmmss). Centralised in `src/utils/format.ts::READING_KEYS`.
+- **Data Feed Health card** on device detail — surfaces backend ingestion state (Live / Recent / Delayed / Stale / No data) so you can visually confirm data is landing.
+- **Device Diagnostics card** — surfaces `VER`, `HVER`, `IMEI`, `IMSI`, `GINT`, `SDINT`, `P_SEN`, `APRES`, `E_COM` when present in the latest reading.
+- **Multi-device concurrent login**: JWT is stateless upstream, and our `push_users` record only overwrites device_token/envirolytics_token; N phones can sign in with the same account and each will receive its own push subscription upstream (Emergent push maps user_id → all registered device_tokens).
+- **Play Store hardening**: bumped `android.versionCode` → 2 and `ios.buildNumber` → 2; declared Android permissions (INTERNET, ACCESS_NETWORK_STATE, POST_NOTIFICATIONS, RECEIVE_BOOT_COMPLETED, VIBRATE, WAKE_LOCK) and blocked LOCATION/RECORD_AUDIO; configured `expo-notifications` plugin (channel + icon + tint colour); added `expo-secure-store` Face ID description; added `usesNonExemptEncryption: false` for iOS export compliance; privacy policy URL in `expo.extra`.
+
+
 ## Purpose
 Companion mobile app for the web dashboard at https://monitor.envirolytics.in — Envirolytics customers sign in with the SAME web credentials and view the exact same IoT field-instrument data on their phones, download compliance-ready CSV/PDF exports, and receive push alerts for offline devices & limit breaches.
 
