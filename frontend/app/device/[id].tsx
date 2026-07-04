@@ -239,8 +239,26 @@ export default function DeviceDetail() {
           </Text>
         </View>
         <StatusPill
-          label={isOffline ? "Offline" : latest ? "Online" : "Idle"}
-          variant={isOffline ? "offline" : latest ? "online" : "warning"}
+          label={
+            isOffline
+              ? "Offline"
+              : feedHealth.label === "No data"
+                ? "Idle"
+                : feedHealth.label === "Stale"
+                  ? "Stale"
+                  : feedHealth.label === "Delayed"
+                    ? "Delayed"
+                    : "Online"
+          }
+          variant={
+            isOffline || feedHealth.label === "Stale"
+              ? "offline"
+              : feedHealth.label === "No data"
+                ? "warning"
+                : feedHealth.label === "Delayed"
+                  ? "warning"
+                  : "online"
+          }
           testID="detail-status-pill"
         />
       </View>
