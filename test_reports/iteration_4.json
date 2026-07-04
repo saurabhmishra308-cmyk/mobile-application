@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 4 regression pass on the five iteration-4 changes (DWLR firmware v2 aliases + readingTs firmware TIME parser, Data Feed Health card on device detail, Device Diagnostics empty-state, Admin GOD-mode UI, backend admin-protection in _auto_deactivate_expired_users). Backend: 10/10 pytest cases PASS in /app/backend/tests/test_regression_iter4.py — /api/, /api/health both 200 with expected payloads; POST /api/register-push accepts the new `role` field without 422 (returns 500 because EMERGENT_PUSH_KEY is placeholder, expected); missing device_token still 422; POST /api/email-subscriptions round-trips weekly:true then monthly:true independently and GET returns them; unknown user_id GET returns falsy defaults; POST /api/email-report 422s on missing recipient and 400/500s on unknown kind (never 422 for a valid payload shape); POST /api/admin/run-auto-deactivate returns 200 {status:scheduled} and the background task logs 'auto-deactivate cycle handled 0 user(s)' with no exceptions in backend.err.log, confirming the admin skip loop iterates cleanly. Frontend (390x844, https://field-data-viewer.preview.emergentagent.com): admin@envirolytics.com / Admin@Envirolytics2026 signs in via login-submit-button, dashboard-screen renders, /devices lists 5 device cards (Piezometer Test DWLR, MAPTEST_FM_001, MAPTEST_DWLR_001, HTTPS_SMOKE_FM_..., MQTT_SMOKE_DWLR_...). Opening the DWLR device (Piezometer Test) shows device-detail-screen with: (a) 3 DWLR primary metrics (WATER LEVEL / TEMPERATURE / BATTERY) all render — legacy field names still handled since fmtNum returns '—' for absent data; (b) NEW detail-feed-health card renders label 'Data Feed · No data' + sub 'Backend has not received any reading from this device.' — feedHealth branch for NaN ts covered cleanly; (c) NEW detail-diagnostics card renders 'Device Diagnostics' header + empty-state 'No firmware diagnostics reported for this device.' with zero crashes when latest has none of VER/IMEI/IMSI/GINT/SDINT/APRES/etc. No red screen. Admin GOD mode verified on /admin/users: stats show Users:2 · Active:1 · Expiring:0 · Expired:0 (admin NOT counted as expiring/expired — matches spec); the Envirolytics Admin row shows a golden GOD status-pill (not Active/Expired), 'No expiry · GOD mode' meta line, and the ADMIN role tag; the non-admin 'Map Test Client' row shows INACTIVE pill and '363d to auto-expiry' countdown as expected; footer text reads 'Non-admin users are auto-deactivated 365 days after creation. Admins are GOD mode — never auto-expired.' — verbatim match. Console warnings observed but not blocking: expo-notifications 'Listening to push token changes not yet fully supported on web' (expected, harmless on web preview), 'shadow*' style props deprecated (RN Web) and 'props.pointerEvents' deprecated (RN Web) — cosmetic Reanimated/RNWeb warnings, pre-existing. Deprecated packages detected: none. SafeAreaView issues detected: none. All 5 iteration-4 changes pass regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "device/[id] (Piezometer Test)",
+        "issues": [
+          "Status pill shows 'ONLINE' even when Data Feed card correctly says 'No data' — status logic is `isOffline ? Offline : latest ? Online : Idle`, so a device with a `latest` object but a garbage/absent timestamp still reads Online. Pre-existing (not introduced this iteration); consider tying status to feedHealth in a future pass.",
+          "Header sub-text 'Last seen · in 581 years' for the same device — cosmetic side-effect of a bogus timestamp in upstream data, unrelated to the iteration-4 changes but worth noting."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter4.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [
+    "No blocking action items. Optional (design polish, not iteration-4 scope): couple device-detail status pill to feedHealth so 'ONLINE' isn't shown when Data Feed reports 'No data' / 'Stale'.",
+    "Optional: guard against invalid timestamps in header 'Last seen' line so obviously-bad values (e.g. 581 years in the future) render as '—' rather than a future relative string."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py::_auto_deactivate_expired_users correctly filters admin cursor with `{$or: [{role: admin}, {is_admin: true}]}` (line 396) AND inside the loop skips any upstream user with role in {admin, superadmin, owner, god} OR is_admin=True (lines 430-434). Belt-and-suspenders protection; safe.",
+    "frontend/src/utils/format.ts READING_KEYS aliases include both legacy (`water_level`, `temperature`, `battery`, `voltage`) and firmware v2 (`LVL`, `WTEMP`, `BVOLT`, `SIGNAL`) — pickReadingValue iterates keys in order so legacy wins when both present. readingTs prefers direct ISO timestamp fields; falls back to _parseFirmwareTs on `TIME` string. Coverage for firmware v2 payloads is complete.",
+    "frontend/app/device/[id].tsx feedHealth memo handles NaN timestamp cleanly (returns {label:'No data', minutes:null}) and DIAGNOSTIC_STRING_KEYS filter safely no-ops when latest is null (the whole detailCard is gated on `latest ? … : null`). No possible crash from missing keys.",
+    "frontend/app/admin/users.tsx stats memo derives `nonAdmin` before computing expiring/expired counts (lines 111-119), so admins never inflate those buckets. Toggle handler blocks deactivation of both the current user AND any other active admin with the alert 'Admins are GOD mode — deactivating another admin can lock the tenant.' — matches spec verbatim.",
+    "StatusPill.tsx exposes 'warning' variant that's used to render the golden GOD pill — the color mapping in styles is centralised, so any future rebrand of GOD colour is a one-line change."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter4.py (new — 10 pytest cases covering the five iteration-4 changes)"
+  ],
+  "success_rate": {
+    "backend": "10/10 (100%)",
+    "frontend": "5/5 iteration-4 regression scenarios PASS — login flow, device-detail Feed Health card render, device-detail Diagnostics empty-state, admin GOD badge + 'No expiry · GOD mode' row, admin stats bar excludes admins from expiring/expired counts, footer text updated verbatim"
+  },
+  "seed_data_creation": "One TEST_iter4_* push_users doc created during /api/email-subscriptions round-trip (best-effort unregister in teardown). No production data mutated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run `pytest backend/tests/test_regression_iter4.py -v` for the iteration-4 regression suite (10 tests, ~5s). Prod admin creds admin@envirolytics.com / Admin@Envirolytics2026 remain valid against monitor.envirolytics.in. Only two users exist in the tenant (1 admin, 1 client) so the 'toggle another admin → alert' path could not be exercised end-to-end — the code path was validated by inspection (see admin/users.tsx lines 134-140). Piezometer Test device has malformed timestamps upstream which surface as 'in 581 years' in the header — noted as a pre-existing cosmetic issue, not regression. Preview URL: https://field-data-viewer.preview.emergentagent.com; backend on same host under /api/*. The three RNWeb console warnings (expo-notifications web push token listener, shadow* deprecation, pointerEvents deprecation) are cosmetic and pre-existing.",
+  "rca_of_issue": "N/A — no defects observed in iteration 4 changes."
+}
