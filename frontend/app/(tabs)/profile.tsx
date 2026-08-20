@@ -8,6 +8,8 @@ import {
   Linking,
   Switch,
   ActivityIndicator,
+  Alert,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
@@ -19,6 +21,7 @@ import {
   getEmailSubscription,
   setEmailSubscription,
 } from "@/src/api/client";
+import { disableBiometric } from "@/src/utils/biometric";
 import { colors, radius, spacing } from "@/src/theme";
 
 export default function ProfileScreen() {
@@ -83,6 +86,36 @@ export default function ProfileScreen() {
   const onLogout = useCallback(async () => {
     await signOut();
     router.replace("/login");
+  }, [signOut, router]);
+
+  // Play Store / App Store review both require a way to delete the account
+  // from within the app. The upstream owns the user record — we open the
+  // web account page in the system browser and clear our local session so
+  // deletion happens under the customer's original web credentials.
+  const onDeleteAccount = useCallback(() => {
+    const doIt = async () => {
+      // 1. purge local session + biometric credentials so no residue stays.
+      await disableBiometric();
+      await signOut();
+      // 2. open the web app's account deletion page (upstream owns the user).
+      try {
+        await Linking.openURL("https://monitor.envirolytics.in/account/delete");
+      } catch {
+        /* still push user to login */
+      }
+      router.replace("/login");
+    };
+    const title = "Delete account?";
+    const msg =
+      "This signs you out and opens monitor.envirolytics.in so you can permanently delete your Envirolytics account. Any saved sensors, alerts and reports on this device will be removed.";
+    if (Platform.OS === "web") {
+      if (typeof window !== "undefined" && window.confirm(`${title}\n\n${msg}`)) doIt();
+      return;
+    }
+    Alert.alert(title, msg, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Delete account", style: "destructive", onPress: doIt },
+    ]);
   }, [signOut, router]);
 
   return (
@@ -246,6 +279,16 @@ export default function ProfileScreen() {
           <Text style={styles.logoutText}>Sign Out</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          testID="delete-account-button"
+          style={styles.deleteBtn}
+          onPress={onDeleteAccount}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="trash-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.deleteText}>Delete my account</Text>
+        </TouchableOpacity>
+
         <Text style={styles.footer}>Envirolytics Monitor · v1.0</Text>
       </ScrollView>
     </View>
@@ -377,6 +420,23 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(239,68,68,0.10)",
   },
   logoutText: { color: colors.danger, fontSize: 14, fontWeight: "700" },
+  deleteBtn: {
+    marginTop: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: "transparent",
+  },
+  deleteText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    letterSpacing: 0.3,
+  },
   footer: {
     color: colors.textMuted,
     fontSize: 10.5,

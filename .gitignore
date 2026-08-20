@@ -80,9 +80,11 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
+# Secrets — allow committed frontend/.env for EXPO_PUBLIC_* injection during deploy.
 .env
 .env.*
 *.env
+!frontend/.env
 credentials.json
 *.key
 .credentials
