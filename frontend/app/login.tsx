@@ -14,17 +14,27 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import { BlurView } from "expo-blur";
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withRepeat,
+  withSequence,
   withTiming,
 } from "react-native-reanimated";
 
-import LoginScene from "@/src/components/LoginScene";
+import LoginHero from "@/src/components/LoginHero";
 import { useAuth } from "@/src/context/AuthContext";
-import { colors, radius, spacing } from "@/src/theme";
+import { colors, spacing } from "@/src/theme";
+
+const FEATURES: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
+  { icon: "pulse-outline", label: "Real-time" },
+  { icon: "notifications-outline", label: "24/7 Alerts" },
+  { icon: "shield-checkmark-outline", label: "CGWA-ready" },
+];
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -34,26 +44,51 @@ export default function LoginScreen() {
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [focusedField, setFocusedField] = useState<"email" | "pw" | null>(null);
 
-  // Card entrance animation (matches web's fade+slide-up feel).
+  // ── Entrance animation ──
   const cardOpacity = useSharedValue(0);
-  const cardY = useSharedValue(24);
-  const badgeOpacity = useSharedValue(0);
+  const cardY = useSharedValue(32);
+  const brandOpacity = useSharedValue(0);
+  const brandScale = useSharedValue(0.94);
+  const featOpacity = useSharedValue(0);
   const startedRef = useRef(false);
 
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    cardOpacity.value = withDelay(150, withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) }));
-    cardY.value = withDelay(150, withTiming(0, { duration: 700, easing: Easing.out(Easing.cubic) }));
-    badgeOpacity.value = withDelay(60, withTiming(1, { duration: 600 }));
-  }, [cardOpacity, cardY, badgeOpacity]);
+    // Brand fades + subtly scales in first.
+    brandOpacity.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
+    brandScale.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.cubic) });
+    // Card lifts up after the brand settles.
+    cardOpacity.value = withDelay(220, withTiming(1, { duration: 650, easing: Easing.out(Easing.cubic) }));
+    cardY.value = withDelay(220, withTiming(0, { duration: 650, easing: Easing.out(Easing.cubic) }));
+    // Feature chips fade in last.
+    featOpacity.value = withDelay(700, withTiming(1, { duration: 500 }));
+  }, [brandOpacity, brandScale, cardOpacity, cardY, featOpacity]);
 
+  // ── Continuous CTA breathing glow ──
+  const ctaGlow = useSharedValue(0.7);
+  useEffect(() => {
+    ctaGlow.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
+        withTiming(0.7, { duration: 1600, easing: Easing.inOut(Easing.quad) }),
+      ),
+      -1,
+    );
+  }, [ctaGlow]);
+
+  const brandStyle = useAnimatedStyle(() => ({
+    opacity: brandOpacity.value,
+    transform: [{ scale: brandScale.value }],
+  }));
   const cardStyle = useAnimatedStyle(() => ({
     opacity: cardOpacity.value,
     transform: [{ translateY: cardY.value }],
   }));
-  const badgeStyle = useAnimatedStyle(() => ({ opacity: badgeOpacity.value }));
+  const featStyle = useAnimatedStyle(() => ({ opacity: featOpacity.value }));
+  const ctaShadowStyle = useAnimatedStyle(() => ({ shadowOpacity: ctaGlow.value }));
 
   const onSubmit = useCallback(async () => {
     if (!email.trim() || !password) {
@@ -73,217 +108,366 @@ export default function LoginScreen() {
   }, [email, password, signIn, router]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      {/* Animated scenic backdrop */}
-      <LoginScene />
+    <View style={styles.root}>
+      {/* Cinematic animated backdrop */}
+      <LoginHero />
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+      <SafeAreaView style={{ flex: 1 }} edges={["top", "bottom"]}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
         >
-          <Animated.View style={[styles.card, cardStyle]} testID="login-form">
-            <Animated.View style={[styles.brand, badgeStyle]} testID="login-brand">
+          <ScrollView
+            contentContainerStyle={styles.scroll}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            {/* ── Brand mark & hero copy ── */}
+            <Animated.View style={[styles.brand, brandStyle]} testID="login-brand">
+              <View style={styles.markWrap}>
+                <LinearGradient
+                  colors={["#10b981", "#059669"]}
+                  style={styles.markGradient}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <Ionicons name="leaf" size={30} color="#f0fdf4" />
+                </LinearGradient>
+              </View>
               <Text style={styles.brandTitle}>ENVIROLYTICS</Text>
-              <Text style={styles.brandSubtitle}>
-                SUSTAINABILITY · PRIVATE · LIMITED
+              <Text style={styles.brandTagline}>
+                Environmental intelligence, in your pocket.
               </Text>
             </Animated.View>
 
-            <Text style={styles.heading}>Sign in to your account</Text>
-
-            <Text style={styles.label}>EMAIL</Text>
-            <TextInput
-              testID="login-email-input"
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoCorrect={false}
-              placeholder="admin@envirolytics.com"
-              placeholderTextColor="#94a3b8"
-              returnKeyType="next"
-            />
-
-            <Text style={styles.label}>PASSWORD</Text>
-            <View style={styles.pwWrap}>
-              <TextInput
-                testID="login-password-input"
-                style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPw}
-                placeholder="••••••••"
-                placeholderTextColor="#94a3b8"
-                returnKeyType="go"
-                onSubmitEditing={onSubmit}
-              />
-              <TouchableOpacity
-                testID="login-toggle-password"
-                onPress={() => setShowPw((v) => !v)}
-                hitSlop={10}
-                style={styles.pwToggle}
-              >
-                <Ionicons
-                  name={showPw ? "eye-off-outline" : "eye-outline"}
-                  size={18}
-                  color="#64748b"
-                />
-              </TouchableOpacity>
-            </View>
-
-            {error ? (
-              <View style={styles.errorBox} testID="login-error">
-                <Ionicons name="alert-circle" size={16} color={colors.danger} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            <TouchableOpacity
-              testID="login-submit-button"
-              activeOpacity={0.85}
-              style={[styles.submit, loading && { opacity: 0.7 }]}
-              onPress={onSubmit}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator color="#fff" />
+            {/* ── Glassmorphism sign-in card ── */}
+            <Animated.View style={[styles.cardWrap, cardStyle]} testID="login-form">
+              {Platform.OS === "ios" ? (
+                <BlurView intensity={30} tint="dark" style={styles.blur} />
               ) : (
-                <Text style={styles.submitText}>Sign Me In</Text>
+                <View style={styles.blurFallback} />
               )}
-            </TouchableOpacity>
 
-            <TouchableOpacity
-              testID="policies-link"
-              onPress={() => Linking.openURL("https://monitor.envirolytics.in/policies")}
-              style={styles.policyRow}
-              hitSlop={8}
-            >
-              <Ionicons name="document-text-outline" size={14} color={colors.text} />
-              <Text style={styles.policyText}>Policies</Text>
-            </TouchableOpacity>
+              <View style={styles.cardInner}>
+                <Text style={styles.cardTitle}>Welcome back</Text>
+                <Text style={styles.cardSub}>Sign in to your monitoring workspace</Text>
 
-            <Text style={styles.footer}>VERSION 1.0 · SECURE LOGIN</Text>
-          </Animated.View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+                {/* Email */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    focusedField === "email" && styles.inputWrapFocus,
+                  ]}
+                >
+                  <Ionicons
+                    name="mail-outline"
+                    size={16}
+                    color={focusedField === "email" ? colors.eco : "#94a3b8"}
+                  />
+                  <TextInput
+                    testID="login-email-input"
+                    style={styles.input}
+                    value={email}
+                    onChangeText={setEmail}
+                    onFocus={() => setFocusedField("email")}
+                    onBlur={() => setFocusedField(null)}
+                    autoCapitalize="none"
+                    keyboardType="email-address"
+                    autoCorrect={false}
+                    placeholder="you@company.com"
+                    placeholderTextColor="#64748b"
+                    returnKeyType="next"
+                  />
+                </View>
+
+                {/* Password */}
+                <View
+                  style={[
+                    styles.inputWrap,
+                    focusedField === "pw" && styles.inputWrapFocus,
+                  ]}
+                >
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={16}
+                    color={focusedField === "pw" ? colors.eco : "#94a3b8"}
+                  />
+                  <TextInput
+                    testID="login-password-input"
+                    style={styles.input}
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={() => setFocusedField("pw")}
+                    onBlur={() => setFocusedField(null)}
+                    secureTextEntry={!showPw}
+                    placeholder="Your password"
+                    placeholderTextColor="#64748b"
+                    returnKeyType="go"
+                    onSubmitEditing={onSubmit}
+                  />
+                  <TouchableOpacity
+                    testID="login-toggle-password"
+                    onPress={() => setShowPw((v) => !v)}
+                    hitSlop={12}
+                  >
+                    <Ionicons
+                      name={showPw ? "eye-off-outline" : "eye-outline"}
+                      size={18}
+                      color="#94a3b8"
+                    />
+                  </TouchableOpacity>
+                </View>
+
+                {error ? (
+                  <View style={styles.errorBox} testID="login-error">
+                    <Ionicons name="alert-circle" size={16} color={colors.danger} />
+                    <Text style={styles.errorText} numberOfLines={2}>
+                      {error}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* CTA */}
+                <Animated.View style={ctaShadowStyle}>
+                  <TouchableOpacity
+                    testID="login-submit-button"
+                    activeOpacity={0.9}
+                    onPress={onSubmit}
+                    disabled={loading}
+                  >
+                    <LinearGradient
+                      colors={
+                        loading
+                          ? ["#334155", "#1e293b"]
+                          : ["#10b981", "#059669"]
+                      }
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.submit}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <Text style={styles.submitText}>Sign in</Text>
+                          <Ionicons name="arrow-forward" size={18} color="#f0fdf4" />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </Animated.View>
+
+                <TouchableOpacity
+                  testID="policies-link"
+                  onPress={() => Linking.openURL("https://monitor.envirolytics.in/policies")}
+                  style={styles.policyRow}
+                  hitSlop={12}
+                >
+                  <Ionicons name="shield-outline" size={13} color="#94a3b8" />
+                  <Text style={styles.policyText}>Privacy & Policies</Text>
+                </TouchableOpacity>
+              </View>
+            </Animated.View>
+
+            {/* ── Feature chips ── */}
+            <Animated.View style={[styles.features, featStyle]}>
+              {FEATURES.map((f) => (
+                <View key={f.label} style={styles.featChip}>
+                  <Ionicons name={f.icon} size={12} color={colors.eco} />
+                  <Text style={styles.featText}>{f.label}</Text>
+                </View>
+              ))}
+            </Animated.View>
+
+            <Text style={styles.footer}>v1.0.1 · Envirolytics Sustainability Pvt. Ltd.</Text>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: "#8ec5e8" },
+  root: { flex: 1, backgroundColor: "#03111f" },
   scroll: {
     flexGrow: 1,
-    justifyContent: "center",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xxl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+    justifyContent: "center",
   },
-  card: {
-    padding: spacing.xl,
-    backgroundColor: "rgba(26, 35, 50, 0.94)",
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: "rgba(148, 163, 184, 0.25)",
-    // Subtle glow to lift the card off the busy scene.
-    shadowColor: "#000",
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
+
+  // ── Brand ──
+  brand: {
+    alignItems: "center",
+    marginBottom: spacing.xl,
+  },
+  markWrap: {
+    marginBottom: spacing.md,
+  },
+  markGradient: {
+    width: 72,
+    height: 72,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+    // Native shadow so it "floats" over the animated backdrop.
+    shadowColor: "#10b981",
+    shadowOpacity: 0.6,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
     elevation: 12,
   },
-  brand: { alignItems: "center", marginBottom: spacing.lg },
   brandTitle: {
-    color: "#4aa3d8",
+    color: "#f0fdf4",
     fontSize: 22,
     fontWeight: "800",
-    letterSpacing: 6,
-  },
-  brandSubtitle: {
-    color: "#cbd5e1",
-    fontSize: 10.5,
-    letterSpacing: 3,
+    letterSpacing: 5,
     marginTop: 4,
   },
-  heading: {
-    color: "#f8fafc",
-    fontSize: 18,
+  brandTagline: {
+    color: "#94a3b8",
+    fontSize: 13,
+    marginTop: 6,
     textAlign: "center",
-    marginVertical: spacing.md,
-    fontWeight: "600",
+    letterSpacing: 0.2,
   },
-  label: {
-    color: "#cbd5e1",
-    fontSize: 11,
-    letterSpacing: 2,
-    fontWeight: "700",
-    marginBottom: 6,
-    marginTop: spacing.md,
-  },
-  input: {
-    color: "#0f172a",
-    backgroundColor: "#f8fafc",
+
+  // ── Card ──
+  cardWrap: {
+    borderRadius: 24,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.06)",
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 12,
-    fontSize: 14,
-    marginBottom: 4,
+    borderColor: "rgba(148, 163, 184, 0.18)",
+    // A dark base so Android (no BlurView) still looks premium.
+    backgroundColor: "rgba(6, 20, 36, 0.85)",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    shadowOffset: { width: 0, height: 18 },
+    elevation: 18,
   },
-  pwWrap: { flexDirection: "row", alignItems: "center" },
-  pwToggle: {
-    position: "absolute",
-    right: 12,
-    padding: 4,
+  blur: { ...StyleSheet.absoluteFillObject },
+  blurFallback: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 30, 50, 0.55)",
   },
-  errorBox: {
-    marginTop: spacing.md,
-    padding: spacing.md,
-    backgroundColor: "rgba(239, 68, 68, 0.15)",
-    borderColor: "rgba(239, 68, 68, 0.35)",
-    borderWidth: 1,
-    borderRadius: radius.md,
+  cardInner: {
+    padding: spacing.xl,
+  },
+  cardTitle: {
+    color: "#f8fafc",
+    fontSize: 22,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+  cardSub: {
+    color: "#94a3b8",
+    fontSize: 12.5,
+    marginTop: 6,
+    marginBottom: spacing.lg,
+    letterSpacing: 0.3,
+  },
+
+  // ── Inputs ──
+  inputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: 10,
+    paddingHorizontal: spacing.md,
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "rgba(15, 23, 42, 0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(148, 163, 184, 0.15)",
+    marginBottom: 12,
   },
-  errorText: { color: "#fecaca", flex: 1, fontSize: 12.5 },
-  submit: {
-    marginTop: spacing.xl,
-    alignSelf: "center",
-    minWidth: 160,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: 14,
-    borderRadius: 999,
-    backgroundColor: "#f59e0b",
+  inputWrapFocus: {
+    borderColor: "rgba(16, 185, 129, 0.55)",
+    backgroundColor: "rgba(16, 185, 129, 0.06)",
+  },
+  input: {
+    flex: 1,
+    color: "#f8fafc",
+    fontSize: 14.5,
+    paddingVertical: 0,
+    fontWeight: "500",
+  },
+
+  // ── Error ──
+  errorBox: {
+    marginTop: 4,
+    padding: 12,
+    backgroundColor: "rgba(239, 68, 68, 0.12)",
+    borderColor: "rgba(239, 68, 68, 0.35)",
+    borderWidth: 1,
+    borderRadius: 12,
+    flexDirection: "row",
     alignItems: "center",
-    // Warm glow like the web button.
-    shadowColor: "#f59e0b",
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    gap: 8,
   },
-  submitText: { color: "#fff", fontWeight: "800", fontSize: 15, letterSpacing: 0.3 },
-  policyRow: {
+  errorText: { color: "#fecaca", flex: 1, fontSize: 12.5, fontWeight: "500" },
+
+  // ── CTA ──
+  submit: {
     marginTop: spacing.lg,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+    borderRadius: 16,
+    shadowColor: "#10b981",
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 8 },
+  },
+  submitText: {
+    color: "#f0fdf4",
+    fontSize: 15,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+  policyRow: {
+    marginTop: spacing.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
   },
-  policyText: { color: "#f8fafc", fontSize: 13 },
+  policyText: { color: "#94a3b8", fontSize: 12, letterSpacing: 0.3 },
+
+  // ── Feature chips ──
+  features: {
+    flexDirection: "row",
+    justifyContent: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: spacing.xl,
+  },
+  featChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(16, 185, 129, 0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.28)",
+  },
+  featText: {
+    color: "#a7f3d0",
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+
   footer: {
-    marginTop: spacing.md,
-    color: "#94a3b8",
-    fontSize: 10,
-    letterSpacing: 2,
+    marginTop: spacing.lg,
     textAlign: "center",
+    color: "#475569",
+    fontSize: 10,
+    letterSpacing: 1.4,
   },
 });
