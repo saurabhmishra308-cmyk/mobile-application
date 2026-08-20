@@ -80,11 +80,17 @@ memory/test_credentials.md
 
 # Mobile development
 android-sdk/
-# Secrets — allow committed frontend/.env for EXPO_PUBLIC_* injection during deploy.
-.env
-.env.*
-*.env
-!frontend/.env
+# ────────────────────────────────────────────────────────────────
+# Env files
+#   • frontend/.env  → committed (contains only EXPO_PUBLIC_* build-time config)
+#   • backend/.env   → ignored (SENDGRID_API_KEY, MONGO_URL, EMERGENT_PUSH_KEY)
+# ────────────────────────────────────────────────────────────────
+backend/.env
+backend/.env.*
+*.local.env
+.env.local
+.env.production
+.env.development
 credentials.json
 *.key
 .credentials
