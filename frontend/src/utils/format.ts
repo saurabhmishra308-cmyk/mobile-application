@@ -30,9 +30,67 @@ export function fmtNum(v: unknown, digits = 2): string {
 
 export function prettyType(t?: string | null): string {
   if (!t) return "Instrument";
-  if (t === "dwlr") return "DWLR";
-  if (t === "flowmeter") return "Flowmeter";
+  const key = t.toLowerCase();
+  if (key === "dwlr") return "DWLR";
+  if (key === "flowmeter") return "Flowmeter";
+  if (key === "ph") return "pH Sensor";
+  if (key === "tds") return "TDS";
+  if (key === "conductivity") return "Conductivity";
   return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
+// Central metadata for every instrument type — icon, colour, and default unit.
+// Used by Devices tab, device-detail, and the new Water-Quality screen so we
+// stay consistent as more instrument types are added upstream.
+export const INSTRUMENT_META: Record<
+  string,
+  { icon: any; color: string; label: string; unit: string; primaryKeys: string[] }
+> = {
+  dwlr: {
+    icon: "water-outline",
+    color: "#0ea5e9",
+    label: "DWLR",
+    unit: "m",
+    primaryKeys: ["water_level", "level", "depth", "LVL", "RAW", "D_SEN"],
+  },
+  flowmeter: {
+    icon: "speedometer-outline",
+    color: "#10b981",
+    label: "Flowmeter",
+    unit: "m³/h",
+    primaryKeys: ["flow_rate", "rate", "flow", "flowrate"],
+  },
+  ph: {
+    icon: "flask-outline",
+    color: "#a855f7", // purple — matches pH scale gradient
+    label: "pH Sensor",
+    unit: "pH",
+    primaryKeys: ["ph", "PH", "value", "reading"],
+  },
+  tds: {
+    icon: "beaker-outline",
+    color: "#f59e0b", // amber — dissolved solids
+    label: "TDS",
+    unit: "ppm",
+    primaryKeys: ["tds", "TDS", "value", "reading"],
+  },
+  conductivity: {
+    icon: "pulse-outline",
+    color: "#22d3ee", // cyan
+    label: "Conductivity",
+    unit: "µS/cm",
+    primaryKeys: ["conductivity", "CONDUCTIVITY", "ec", "EC", "value", "reading"],
+  },
+};
+
+export function instrumentMeta(type?: string | null) {
+  return INSTRUMENT_META[(type || "").toLowerCase()] || {
+    icon: "hardware-chip-outline",
+    color: "#94a3b8",
+    label: prettyType(type),
+    unit: "",
+    primaryKeys: ["value", "reading"],
+  };
 }
 
 export function prettyCategory(c?: string | null): string {

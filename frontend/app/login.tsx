@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Linking,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -69,6 +70,9 @@ export default function LoginScreen() {
 
   // ── Continuous CTA breathing glow ──
   const ctaGlow = useSharedValue(0.7);
+  // ── Heartbeat pulse for the wordmark (thump-thump … thump-thump) ──
+  const heartScale = useSharedValue(1);
+  const heartGlow = useSharedValue(0.35);
   useEffect(() => {
     ctaGlow.value = withRepeat(
       withSequence(
@@ -77,7 +81,28 @@ export default function LoginScreen() {
       ),
       -1,
     );
-  }, [ctaGlow]);
+    // Heartbeat rhythm — quick double-beat then rest ~ 800ms.
+    heartScale.value = withRepeat(
+      withSequence(
+        withTiming(1.05, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(1.0, { duration: 110, easing: Easing.in(Easing.quad) }),
+        withTiming(1.055, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(1.0, { duration: 130, easing: Easing.in(Easing.quad) }),
+        withTiming(1.0, { duration: 800 }), // rest
+      ),
+      -1,
+    );
+    heartGlow.value = withRepeat(
+      withSequence(
+        withTiming(1.0, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(0.45, { duration: 110 }),
+        withTiming(1.0, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(0.35, { duration: 130 }),
+        withTiming(0.35, { duration: 800 }), // rest
+      ),
+      -1,
+    );
+  }, [ctaGlow, heartScale, heartGlow]);
 
   const brandStyle = useAnimatedStyle(() => ({
     opacity: brandOpacity.value,
@@ -89,6 +114,14 @@ export default function LoginScreen() {
   }));
   const featStyle = useAnimatedStyle(() => ({ opacity: featOpacity.value }));
   const ctaShadowStyle = useAnimatedStyle(() => ({ shadowOpacity: ctaGlow.value }));
+  const heartbeatStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+    shadowOpacity: heartGlow.value,
+  }));
+  const heartHaloStyle = useAnimatedStyle(() => ({
+    opacity: heartGlow.value,
+    transform: [{ scale: 1 + (heartScale.value - 1) * 2 }],
+  }));
 
   const onSubmit = useCallback(async () => {
     if (!email.trim() || !password) {
@@ -126,16 +159,21 @@ export default function LoginScreen() {
             {/* ── Brand mark & hero copy ── */}
             <Animated.View style={[styles.brand, brandStyle]} testID="login-brand">
               <View style={styles.markWrap}>
-                <LinearGradient
-                  colors={["#10b981", "#059669"]}
-                  style={styles.markGradient}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                >
-                  <Ionicons name="leaf" size={30} color="#f0fdf4" />
-                </LinearGradient>
+                <View style={styles.markHalo} />
+                <Image
+                  source={require("../assets/images/envirolytics-logo.png")}
+                  style={styles.markImage}
+                  resizeMode="contain"
+                />
               </View>
-              <Text style={styles.brandTitle}>ENVIROLYTICS</Text>
+              <View style={styles.wordmarkWrap}>
+                <Animated.View style={[styles.wordmarkHalo, heartHaloStyle]} />
+                <Animated.Image
+                  source={require("../assets/images/envirolytics-wordmark.png")}
+                  style={[styles.wordmark, heartbeatStyle]}
+                  resizeMode="contain"
+                />
+              </View>
               <Text style={styles.brandTagline}>
                 Environmental intelligence, in your pocket.
               </Text>
@@ -305,19 +343,53 @@ const styles = StyleSheet.create({
   },
   markWrap: {
     marginBottom: spacing.md,
-  },
-  markGradient: {
-    width: 72,
-    height: 72,
-    borderRadius: 22,
+    width: 108,
+    height: 108,
     alignItems: "center",
     justifyContent: "center",
-    // Native shadow so it "floats" over the animated backdrop.
+  },
+  markHalo: {
+    position: "absolute",
+    width: 108,
+    height: 108,
+    borderRadius: 54,
+    backgroundColor: "rgba(16, 185, 129, 0.14)",
     shadowColor: "#10b981",
-    shadowOpacity: 0.6,
-    shadowRadius: 22,
+    shadowOpacity: 0.7,
+    shadowRadius: 28,
     shadowOffset: { width: 0, height: 10 },
+    elevation: 14,
+  },
+  markImage: {
+    width: 96,
+    height: 96,
+  },
+  wordmarkWrap: {
+    marginTop: 6,
+    width: 300,
+    height: 72,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  wordmarkHalo: {
+    position: "absolute",
+    width: 300,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "rgba(16, 185, 129, 0.16)",
+    shadowColor: "#10b981",
+    shadowOpacity: 0.75,
+    shadowRadius: 26,
+    shadowOffset: { width: 0, height: 0 },
     elevation: 12,
+  },
+  wordmark: {
+    width: 280,
+    height: 62,
+    // Green heartbeat glow so the wordmark subtly pulses.
+    shadowColor: "#10b981",
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 },
   },
   brandTitle: {
     color: "#f0fdf4",

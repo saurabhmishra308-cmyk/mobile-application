@@ -131,6 +131,42 @@ export type DwlrReading = {
   [k: string]: any;
 };
 
+// Generic reading shape for the new instrument types (pH / TDS / Conductivity).
+export type GenericReading = {
+  hardware_id?: string;
+  timestamp?: string;
+  ts?: string;
+  value?: number | null;
+  [k: string]: any;
+};
+
+// STP / DO / Chlorine live values returned by /api/water-quality/latest.
+export type WaterQualityMeta = {
+  unit_default?: string;
+  min?: number;
+  max?: number;
+  safe_min?: number;
+  safe_max?: number;
+};
+
+export type WaterQualityReading = {
+  hardware_id?: string;
+  timestamp?: string;
+  location_name?: string | null;
+  // dynamic — one column per param (COD, BOD, TSS, PH, DO_TANK_1, CHLORINE etc.)
+  [k: string]: any;
+};
+
+export type WaterQualityLatest = {
+  unit?: string;
+  stp_params_meta: Record<string, WaterQualityMeta>;
+  do_params_meta: Record<string, WaterQualityMeta>;
+  chlorine_params_meta: Record<string, WaterQualityMeta>;
+  stp: WaterQualityReading[];
+  do: WaterQualityReading[];
+  chlorine: WaterQualityReading[];
+};
+
 export type Weather = {
   main?: { temp?: number; humidity?: number; feels_like?: number };
   weather?: { main?: string; description?: string; icon?: string }[];
@@ -187,6 +223,29 @@ export const api = {
       readings: DwlrReading[];
       count: number;
     }>(`/api/instruments/dwlr/${encodeURIComponent(hw)}/history?hours=${hours}`),
+
+  // ── Generic instrument endpoints (pH / TDS / Conductivity — same shape) ──
+  instrumentLatest: (type: string) =>
+    authed<{ instrument_type: string; readings: GenericReading[]; count: number }>(
+      `/api/instruments/${encodeURIComponent(type)}/latest`,
+    ),
+  instrumentHistory: (type: string, hw: string, hours: number = 24) =>
+    authed<{
+      instrument_type: string;
+      hardware_id: string;
+      readings: GenericReading[];
+      count: number;
+    }>(
+      `/api/instruments/${encodeURIComponent(type)}/${encodeURIComponent(hw)}/history?hours=${hours}`,
+    ),
+
+  // Advertised instrument types on the upstream (dwlr, ph, tds, conductivity …).
+  instrumentTypes: () =>
+    authed<{ types: string[] }>(`/api/instruments/types`),
+
+  // Water quality (STP / DO / Chlorine). Returns latest values + safety thresholds.
+  waterQualityLatest: () =>
+    authed<WaterQualityLatest>(`/api/water-quality/latest`),
   flowmeterLatest: () =>
     authed<{ flowmeters: FlowmeterReading[]; count: number }>(
       "/api/flowmeter/latest",

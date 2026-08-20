@@ -18,14 +18,17 @@ import { StatusPill } from "@/src/components/StatusPill";
 import { api, Instrument, OfflineDevice } from "@/src/api/client";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors, radius, spacing } from "@/src/theme";
-import { prettyCategory, prettyType, fromNow } from "@/src/utils/format";
+import { prettyCategory, prettyType, fromNow, instrumentMeta } from "@/src/utils/format";
 
-type FilterKey = "all" | "dwlr" | "flowmeter" | "offline";
+type FilterKey = "all" | "dwlr" | "flowmeter" | "ph" | "tds" | "conductivity" | "offline";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "dwlr", label: "DWLR" },
   { key: "flowmeter", label: "Flowmeters" },
+  { key: "ph", label: "pH" },
+  { key: "tds", label: "TDS" },
+  { key: "conductivity", label: "Conductivity" },
   { key: "offline", label: "Offline" },
 ];
 
@@ -63,9 +66,9 @@ export default function DevicesScreen() {
 
   const data = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const typeFilters: FilterKey[] = ["dwlr", "flowmeter", "ph", "tds", "conductivity"];
     return instruments.filter((i) => {
-      if (filter === "dwlr" && i.instrument_type !== "dwlr") return false;
-      if (filter === "flowmeter" && i.instrument_type !== "flowmeter") return false;
+      if (typeFilters.includes(filter as FilterKey) && i.instrument_type !== filter) return false;
       if (filter === "offline" && !offlineIds.has(i.hardware_id)) return false;
       if (!q) return true;
       return (
@@ -165,6 +168,7 @@ export default function DevicesScreen() {
           }
           renderItem={({ item }) => {
             const isOffline = offlineIds.has(item.hardware_id);
+            const meta = instrumentMeta(item.instrument_type);
             return (
               <TouchableOpacity
                 testID={`device-card-${item.hardware_id}`}
@@ -186,26 +190,12 @@ export default function DevicesScreen() {
                   style={[
                     styles.typeIcon,
                     {
-                      backgroundColor:
-                        item.instrument_type === "dwlr"
-                          ? "rgba(14,165,233,0.15)"
-                          : "rgba(16,185,129,0.15)",
-                      borderColor:
-                        item.instrument_type === "dwlr"
-                          ? "rgba(14,165,233,0.35)"
-                          : "rgba(16,185,129,0.35)",
+                      backgroundColor: `${meta.color}22`,
+                      borderColor: `${meta.color}55`,
                     },
                   ]}
                 >
-                  <Ionicons
-                    name={
-                      item.instrument_type === "dwlr"
-                        ? "water-outline"
-                        : "speedometer-outline"
-                    }
-                    size={22}
-                    color={item.instrument_type === "dwlr" ? colors.water : colors.eco}
-                  />
+                  <Ionicons name={meta.icon} size={22} color={meta.color} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.cardTitleRow}>

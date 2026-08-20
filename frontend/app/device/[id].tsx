@@ -24,6 +24,7 @@ import {
   fmtDateTime,
   fmtNum,
   fromNow,
+  instrumentMeta,
   pickReadingValue,
   prettyType,
   readingTs,
@@ -74,11 +75,25 @@ export default function DeviceDetail() {
           const o = (off.offline || []).find((d) => d.hardware_id === hardwareId);
           setIsOffline(!!o);
           setLastSeen(o?.last_seen ?? (mine ? readingTs(mine || {}) : null));
-        } else {
-          // dwlr
+        } else if (kind === "dwlr") {
           const [latestRes, histRes, off] = await Promise.all([
             api.dwlrLatest(),
             api.dwlrHistory(hardwareId, hrs),
+            api.offline(24),
+          ]);
+          const mine = (latestRes.readings || []).find(
+            (r) => r.hardware_id === hardwareId,
+          );
+          setLatest(mine || null);
+          setHistory(histRes.readings || []);
+          const o = (off.offline || []).find((d) => d.hardware_id === hardwareId);
+          setIsOffline(!!o);
+          setLastSeen(o?.last_seen ?? (mine ? readingTs(mine || {}) : null));
+        } else {
+          // Generic — pH / TDS / Conductivity (and any future instrument type).
+          const [latestRes, histRes, off] = await Promise.all([
+            api.instrumentLatest(kind),
+            api.instrumentHistory(kind, hardwareId, hrs),
             api.offline(24),
           ]);
           const mine = (latestRes.readings || []).find(
@@ -110,24 +125,17 @@ export default function DeviceDetail() {
   }, [load, hours]);
 
   const chartData = useMemo(() => {
-    if (kind === "flowmeter") {
-      return history
-        .map((r: FlowmeterReading) => {
-          const ts = readingTs(r);
-          const v = pickReadingValue(r, [...READING_KEYS.flowRate]);
-          if (!ts || v === null) return null;
-          const t = new Date(ts).getTime();
-          if (Number.isNaN(t)) return null;
-          return { t, v };
-        })
-        .filter((p): p is { t: number; v: number } => !!p)
-        .sort((a, b) => a.t - b.t);
-    }
-    // DWLR — plot water level.
+    // For every instrument type, plot its primary field (defined in instrumentMeta).
+    const meta = instrumentMeta(kind);
+    const keys = kind === "flowmeter"
+      ? [...READING_KEYS.flowRate]
+      : kind === "dwlr"
+        ? [...READING_KEYS.waterLevel]
+        : meta.primaryKeys;
     return history
       .map((r: Record<string, any>) => {
         const ts = readingTs(r);
-        const v = pickReadingValue(r, [...READING_KEYS.waterLevel]);
+        const v = pickReadingValue(r, keys);
         if (!ts || v === null) return null;
         const t = new Date(ts).getTime();
         if (Number.isNaN(t)) return null;
@@ -137,13 +145,14 @@ export default function DeviceDetail() {
       .sort((a, b) => a.t - b.t);
   }, [history, kind]);
 
-  const chartMeta = useMemo(
-    () =>
-      kind === "dwlr"
-        ? { title: "WATER LEVEL", color: colors.water, unit: " m" }
-        : { title: "FLOW RATE", color: colors.eco, unit: " m³/h" },
-    [kind],
-  );
+  const chartMeta = useMemo(() => {
+    const m = instrumentMeta(kind);
+    return {
+      title: m.label.toUpperCase(),
+      color: m.color,
+      unit: m.unit ? ` ${m.unit}` : "",
+    };
+  }, [kind]);
 
   const chartWidth = Dimensions.get("window").width - spacing.lg * 2 - spacing.lg * 2;
 
@@ -177,22 +186,44 @@ export default function DeviceDetail() {
         },
       ];
     }
+    if (kind === "dwlr") {
+      return [
+        {
+          label: "Water Level",
+          key: "level",
+          value: pickReadingValue(latest, [...READING_KEYS.waterLevel]),
+          unit: "m",
+          icon: "water-outline" as const,
+          color: colors.water,
+        },
+        {
+          label: "Temperature",
+          key: "temp",
+          value: pickReadingValue(latest, [...READING_KEYS.waterTemp]),
+          unit: "°C",
+          icon: "thermometer-outline" as const,
+          color: colors.warning,
+        },
+        {
+          label: "Battery",
+          key: "battery",
+          value: pickReadingValue(latest, [...READING_KEYS.battery]),
+          unit: "V",
+          icon: "battery-half-outline" as const,
+          color: colors.eco,
+        },
+      ];
+    }
+    // Generic (pH / TDS / Conductivity) — one primary reading + battery/signal side stats.
+    const m = instrumentMeta(kind);
     return [
       {
-        label: "Water Level",
-        key: "level",
-        value: pickReadingValue(latest, [...READING_KEYS.waterLevel]),
-        unit: "m",
-        icon: "water-outline" as const,
-        color: colors.water,
-      },
-      {
-        label: "Temperature",
-        key: "temp",
-        value: pickReadingValue(latest, [...READING_KEYS.waterTemp]),
-        unit: "°C",
-        icon: "thermometer-outline" as const,
-        color: colors.warning,
+        label: m.label,
+        key: "value",
+        value: pickReadingValue(latest, m.primaryKeys),
+        unit: m.unit,
+        icon: m.icon,
+        color: m.color,
       },
       {
         label: "Battery",
@@ -201,6 +232,14 @@ export default function DeviceDetail() {
         unit: "V",
         icon: "battery-half-outline" as const,
         color: colors.eco,
+      },
+      {
+        label: "Signal",
+        key: "signal",
+        value: pickReadingValue(latest, [...READING_KEYS.signal]),
+        unit: "",
+        icon: "cellular-outline" as const,
+        color: colors.textSecondary,
       },
     ];
   }, [latest, kind]);
