@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { View, ActivityIndicator, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/src/context/AuthContext";
+import { hasSeenOnboarding } from "@/src/utils/biometric";
 import { colors } from "@/src/theme";
 
 export default function Index() {
@@ -10,8 +11,14 @@ export default function Index() {
 
   useEffect(() => {
     if (!ready) return;
-    if (token) router.replace("/(tabs)/dashboard");
-    else router.replace("/login");
+    (async () => {
+      if (token) {
+        router.replace("/(tabs)/dashboard");
+        return;
+      }
+      const seen = await hasSeenOnboarding();
+      router.replace(seen ? "/login" : "/onboarding");
+    })();
   }, [ready, token, router]);
 
   return (

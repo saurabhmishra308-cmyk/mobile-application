@@ -3752,6 +3752,13 @@ expo-linking@8.0.12:
     expo-constants "~18.0.13"
     invariant "^2.2.4"
 
+expo-local-authentication@~17.0.9:
+  version "17.0.9"
+  resolved "https://registry.yarnpkg.com/expo-local-authentication/-/expo-local-authentication-17.0.9.tgz#8c29a870c448ccee156a4e53bf092758cbf0ac80"
+  integrity sha512-Ro2m6JJ7ebaDCMsnh6CeXKqXUdK5xP2lnrJlAopUO2DGqX5693BWC14ANFihFWL6qEV7IIV4hGpdU5RYyBCbuQ==
+  dependencies:
+    invariant "^2.2.4"
+
 expo-modules-autolinking@3.0.26:
   version "3.0.26"
   resolved "https://registry.yarnpkg.com/expo-modules-autolinking/-/expo-modules-autolinking-3.0.26.tgz#bfbb0d0422e32d3fe8d201c9a287cc82279ada71"

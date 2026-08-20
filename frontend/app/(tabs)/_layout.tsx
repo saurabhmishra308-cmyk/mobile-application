@@ -2,14 +2,17 @@ import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors } from "@/src/theme";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
+import { AlertBanner } from "@/src/components/AlertBanner";
 
 export default function TabsLayout() {
   const insets = useSafeAreaInsets();
   const tabBarHeight = 56 + insets.bottom;
 
   return (
-    <Tabs
+    <View style={{ flex: 1, backgroundColor: colors.bg }}>
+      <AlertBanner />
+      <Tabs
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.eco,
@@ -84,5 +87,6 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    </View>
   );
 }

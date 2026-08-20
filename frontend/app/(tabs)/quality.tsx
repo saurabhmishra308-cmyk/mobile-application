@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 
 import { ScreenHeader } from "@/src/components/ScreenHeader";
 import { StatusPill } from "@/src/components/StatusPill";
@@ -77,6 +78,7 @@ function prettyParam(k: string): string {
 
 export default function WaterQualityScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { signOut } = useAuth();
   const [data, setData] = useState<WaterQualityLatest | null>(null);
   const [loading, setLoading] = useState(true);
@@ -263,8 +265,15 @@ export default function WaterQualityScreen() {
                         const isDanger = r.verdict === "danger";
                         const isUnknown = r.verdict === "unknown";
                         return (
-                          <View
+                          <TouchableOpacity
                             key={r.param}
+                            activeOpacity={0.85}
+                            onPress={() =>
+                              router.push({
+                                pathname: "/wq/[group]/[param]",
+                                params: { group: g, param: r.param },
+                              })
+                            }
                             style={[
                               styles.itemCard,
                               isDanger && { borderColor: "rgba(239, 68, 68, 0.55)", backgroundColor: "rgba(239, 68, 68, 0.05)" },
@@ -303,7 +312,7 @@ export default function WaterQualityScreen() {
                                 {r.unit ? ` ${r.unit}` : ""}
                               </Text>
                             ) : null}
-                          </View>
+                          </TouchableOpacity>
                         );
                       })
                     )}

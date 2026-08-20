@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Linking,
   Image,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -30,11 +31,22 @@ import Animated, {
 import LoginHero from "@/src/components/LoginHero";
 import { useAuth } from "@/src/context/AuthContext";
 import { colors, spacing } from "@/src/theme";
+import {
+  BiometricSupport,
+  authenticate,
+  disableBiometric,
+  enableBiometric,
+  getBiometricSupport,
+  getStoredCredentials,
+  isBiometricEnabled,
+} from "@/src/utils/biometric";
 
 const FEATURES: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
-  { icon: "pulse-outline", label: "Real-time" },
-  { icon: "notifications-outline", label: "24/7 Alerts" },
-  { icon: "shield-checkmark-outline", label: "CGWA-ready" },
+  { icon: "pulse-outline", label: "Real-time data" },
+  { icon: "time-outline", label: "24 × 7" },
+  { icon: "shield-checkmark-outline", label: "CGWA ready" },
+  { icon: "shield-checkmark-outline", label: "SGWA ready" },
+  { icon: "shield-checkmark-outline", label: "CPCB / SPCB ready" },
 ];
 
 export default function LoginScreen() {
@@ -46,6 +58,27 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [focusedField, setFocusedField] = useState<"email" | "pw" | null>(null);
+  const [bioSupport, setBioSupport] = useState<BiometricSupport | null>(null);
+  const [bioSaved, setBioSaved] = useState<boolean>(false);
+  const [bioAuthing, setBioAuthing] = useState<boolean>(false);
+  const [bioAutoRan, setBioAutoRan] = useState<boolean>(false);
+
+  // Detect biometric support + whether user has previously opted-in.
+  useEffect(() => {
+    (async () => {
+      const [sup, saved] = await Promise.all([
+        getBiometricSupport(),
+        isBiometricEnabled(),
+      ]);
+      setBioSupport(sup);
+      setBioSaved(saved);
+    })();
+  }, []);
+
+  const bioIcon: keyof typeof Ionicons.glyphMap = bioSupport?.faceId
+    ? "scan-outline"
+    : "finger-print-outline";
+  const bioLabel = bioSupport?.faceId ? "Unlock with Face ID" : "Unlock with fingerprint";
 
   // ── Entrance animation ──
   const cardOpacity = useSharedValue(0);
@@ -123,6 +156,25 @@ export default function LoginScreen() {
     transform: [{ scale: 1 + (heartScale.value - 1) * 2 }],
   }));
 
+  const promptEnableBiometric = useCallback(
+    (email: string, password: string) => {
+      const title = bioSupport?.faceId ? "Enable Face ID?" : "Enable fingerprint unlock?";
+      const msg = "Sign in next time with a single tap. Your credentials stay encrypted on this device only.";
+      const doEnable = async () => {
+        const ok = await authenticate(bioSupport?.faceId ? "Confirm Face ID" : "Confirm fingerprint");
+        if (!ok) return;
+        await enableBiometric(email, password);
+        setBioSaved(true);
+      };
+      if (Platform.OS === "web") return; // browser preview doesn't have biometric
+      Alert.alert(title, msg, [
+        { text: "Not now", style: "cancel" },
+        { text: "Enable", onPress: doEnable },
+      ]);
+    },
+    [bioSupport?.faceId],
+  );
+
   const onSubmit = useCallback(async () => {
     if (!email.trim() || !password) {
       setError("Please enter your email and password.");
@@ -132,13 +184,58 @@ export default function LoginScreen() {
     setError(null);
     try {
       await signIn(email.trim(), password);
+      // Offer to enable biometric on the very first successful login only.
+      if (bioSupport?.supported && !bioSaved) {
+        promptEnableBiometric(email.trim(), password);
+      }
       router.replace("/(tabs)/dashboard");
     } catch (e: any) {
       setError(e?.message || "Sign in failed. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [email, password, signIn, router]);
+  }, [email, password, signIn, router, bioSupport?.supported, bioSaved, promptEnableBiometric]);
+
+  const onBiometric = useCallback(async () => {
+    if (bioAuthing) return;
+    setBioAuthing(true);
+    setError(null);
+    try {
+      const ok = await authenticate(bioLabel);
+      if (!ok) return;
+      const creds = await getStoredCredentials();
+      if (!creds) {
+        // stored creds gone; reset biometric state
+        await disableBiometric();
+        setBioSaved(false);
+        setError("Please sign in with your password once more to re-enable biometric.");
+        return;
+      }
+      setLoading(true);
+      await signIn(creds.email, creds.password);
+      router.replace("/(tabs)/dashboard");
+    } catch (e: any) {
+      setError(e?.message || "Biometric sign-in failed. Please use your password.");
+      // If the upstream password is no longer valid, purge stored creds.
+      const status = (e && (e as any).status) as number | undefined;
+      if (status === 401) {
+        await disableBiometric();
+        setBioSaved(false);
+      }
+    } finally {
+      setBioAuthing(false);
+      setLoading(false);
+    }
+  }, [bioAuthing, bioLabel, signIn, router]);
+
+  // Auto-prompt biometric on cold-start once state is settled and user opted-in.
+  useEffect(() => {
+    if (bioAutoRan) return;
+    if (!bioSupport || !bioSupport.supported || !bioSaved) return;
+    setBioAutoRan(true);
+    const t = setTimeout(() => onBiometric(), 900);
+    return () => clearTimeout(t);
+  }, [bioSupport, bioSaved, bioAutoRan, onBiometric]);
 
   return (
     <View style={styles.root}>
@@ -295,6 +392,24 @@ export default function LoginScreen() {
                     </LinearGradient>
                   </TouchableOpacity>
                 </Animated.View>
+
+                {/* Biometric quick-unlock (shown only when device supports it and user opted-in) */}
+                {bioSupport?.supported && bioSaved ? (
+                  <TouchableOpacity
+                    testID="login-biometric-button"
+                    activeOpacity={0.85}
+                    onPress={onBiometric}
+                    disabled={bioAuthing || loading}
+                    style={styles.bioBtn}
+                  >
+                    {bioAuthing ? (
+                      <ActivityIndicator color={colors.eco} size="small" />
+                    ) : (
+                      <Ionicons name={bioIcon} size={18} color={colors.eco} />
+                    )}
+                    <Text style={styles.bioBtnText}>{bioLabel}</Text>
+                  </TouchableOpacity>
+                ) : null}
 
                 <TouchableOpacity
                   testID="policies-link"
@@ -499,6 +614,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
     letterSpacing: 0.4,
+  },
+  bioBtn: {
+    marginTop: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.35)",
+    backgroundColor: "rgba(16, 185, 129, 0.08)",
+  },
+  bioBtnText: {
+    color: colors.eco,
+    fontSize: 13.5,
+    fontWeight: "700",
+    letterSpacing: 0.3,
   },
   policyRow: {
     marginTop: spacing.md,
