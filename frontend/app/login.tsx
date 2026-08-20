@@ -114,12 +114,12 @@ export default function LoginScreen() {
       ),
       -1,
     );
-    // Heartbeat rhythm — quick double-beat then rest ~ 800ms.
+    // Heartbeat rhythm — subtle double-beat so the wordmark stays inside its safe box.
     heartScale.value = withRepeat(
       withSequence(
-        withTiming(1.05, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(1.025, { duration: 110, easing: Easing.out(Easing.quad) }),
         withTiming(1.0, { duration: 110, easing: Easing.in(Easing.quad) }),
-        withTiming(1.055, { duration: 110, easing: Easing.out(Easing.quad) }),
+        withTiming(1.03, { duration: 110, easing: Easing.out(Easing.quad) }),
         withTiming(1.0, { duration: 130, easing: Easing.in(Easing.quad) }),
         withTiming(1.0, { duration: 800 }), // rest
       ),
@@ -481,16 +481,16 @@ const styles = StyleSheet.create({
   },
   wordmarkWrap: {
     marginTop: 6,
-    width: 300,
-    height: 72,
+    width: 260,
+    height: 60,
     alignItems: "center",
     justifyContent: "center",
   },
   wordmarkHalo: {
     position: "absolute",
-    width: 300,
-    height: 72,
-    borderRadius: 36,
+    width: 260,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: "rgba(16, 185, 129, 0.16)",
     shadowColor: "#10b981",
     shadowOpacity: 0.75,
@@ -499,8 +499,8 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   wordmark: {
-    width: 280,
-    height: 62,
+    width: 232,
+    height: 52,
     // Green heartbeat glow so the wordmark subtly pulses.
     shadowColor: "#10b981",
     shadowRadius: 18,
