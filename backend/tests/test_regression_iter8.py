@@ -1,0 +1,67 @@
+"""Iteration-8 backend regression.
+
+No new backend endpoints — bug fixes are frontend only (flowmeter scaling,
+weather card, live-card tap). Verify the four endpoints still respond 200.
+"""
+from __future__ import annotations
+
+import os
+import uuid
+
+import pytest
+import requests
+
+BASE_URL = os.environ["EXPO_PUBLIC_BACKEND_URL"].rstrip("/")
+
+
+@pytest.fixture(scope="module")
+def api_client():
+    s = requests.Session()
+    s.headers.update({"Content-Type": "application/json"})
+    return s
+
+
+@pytest.fixture(scope="module")
+def test_user_id():
+    return f"TEST_iter8_{uuid.uuid4().hex[:10]}"
+
+
+class TestHealth:
+    def test_root(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/")
+        assert r.status_code == 200
+        assert r.json().get("status") == "ok"
+
+    def test_health(self, api_client):
+        r = api_client.get(f"{BASE_URL}/api/health")
+        assert r.status_code == 200
+        assert isinstance(r.json().get("poll_interval_s"), int)
+
+
+class TestAutoDeactivate:
+    def test_scheduled(self, api_client):
+        r = api_client.post(f"{BASE_URL}/api/admin/run-auto-deactivate")
+        assert r.status_code == 200
+        assert r.json() == {"status": "scheduled"}
+
+
+class TestEmailSubscriptions:
+    def test_round_trip(self, api_client, test_user_id):
+        payload = {
+            "user_id": test_user_id,
+            "email": f"{test_user_id}@example.com",
+            "envirolytics_token": "TEST_dummy_token",
+            "full_name": "Iter8 Tester",
+            "weekly": True,
+            "monthly": False,
+        }
+        r = api_client.post(f"{BASE_URL}/api/email-subscriptions", json=payload)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["weekly"] is True and body["monthly"] is False
+
+        g = api_client.get(f"{BASE_URL}/api/email-subscriptions/{test_user_id}")
+        assert g.status_code == 200
+        gb = g.json()
+        assert gb["weekly"] is True
+        assert gb["email"] == payload["email"]

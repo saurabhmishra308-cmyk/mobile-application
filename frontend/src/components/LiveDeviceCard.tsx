@@ -7,7 +7,7 @@
 
 import { useEffect } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -116,7 +116,11 @@ export function LiveDeviceCard({
               { backgroundColor: `${meta.color}22`, borderColor: `${meta.color}55` },
             ]}
           >
-            <Ionicons name={meta.icon} size={22} color={meta.color} />
+            {meta.iconFamily === "material" ? (
+              <MaterialCommunityIcons name={meta.icon} size={22} color={meta.color} />
+            ) : (
+              <Ionicons name={meta.icon} size={22} color={meta.color} />
+            )}
           </View>
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={styles.title} numberOfLines={1}>

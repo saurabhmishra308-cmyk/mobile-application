@@ -42,9 +42,24 @@ export function prettyType(t?: string | null): string {
 // Central metadata for every instrument type — icon, colour, and default unit.
 // Used by Devices tab, device-detail, and the new Water-Quality screen so we
 // stay consistent as more instrument types are added upstream.
+//
+// `iconFamily` controls which icon set the rendering component picks up:
+//   - "ionicons" (default) → @expo/vector-icons Ionicons
+//   - "material"           → @expo/vector-icons MaterialCommunityIcons
+// (MCI has the authentic lab-analyzer glyphs like `water-percent`,
+// `test-tube` and `flask-round-bottom-outline` that Ionicons is missing.)
+export type IconFamily = "ionicons" | "material";
+
 export const INSTRUMENT_META: Record<
   string,
-  { icon: any; color: string; label: string; unit: string; primaryKeys: string[] }
+  {
+    icon: any;
+    iconFamily?: IconFamily;
+    color: string;
+    label: string;
+    unit: string;
+    primaryKeys: string[];
+  }
 > = {
   dwlr: {
     icon: "water-outline",
@@ -88,11 +103,43 @@ export const INSTRUMENT_META: Record<
     unit: "µS/cm",
     primaryKeys: ["conductivity", "CONDUCTIVITY", "ec", "EC", "value", "reading"],
   },
+  // ── Water Quality analyzers (uses MaterialCommunityIcons) ──────────
+  do_meter: {
+    icon: "water-percent",
+    iconFamily: "material",
+    color: "#14b8a6", // teal — dissolved oxygen
+    label: "DO Analyzer",
+    unit: "mg/L",
+    primaryKeys: ["do", "DO", "DO_TANK_1", "DO_TANK_2", "value", "reading"],
+  },
+  stp_meter: {
+    icon: "test-tube",
+    iconFamily: "material",
+    color: "#0ea5e9", // blue — treated effluent
+    label: "STP Analyzer",
+    unit: "mg/L",
+    primaryKeys: ["cod", "COD", "bod", "BOD", "tss", "TSS", "value"],
+  },
+  chlorine_meter: {
+    icon: "flask-round-bottom-outline",
+    iconFamily: "material",
+    color: "#eab308", // yellow — chlorine dosing
+    label: "Chlorine Analyzer",
+    unit: "mg/L",
+    primaryKeys: ["chlorine", "CHLORINE", "residual_chlorine", "value"],
+  },
 };
+
+// Aliases — the upstream sometimes reports the group name directly
+// (e.g. instrument_type = "do" or "stp"). Point them at the same meta.
+INSTRUMENT_META["do"] = INSTRUMENT_META.do_meter;
+INSTRUMENT_META["stp"] = INSTRUMENT_META.stp_meter;
+INSTRUMENT_META["chlorine"] = INSTRUMENT_META.chlorine_meter;
 
 export function instrumentMeta(type?: string | null) {
   return INSTRUMENT_META[(type || "").toLowerCase()] || {
     icon: "hardware-chip-outline",
+    iconFamily: "ionicons" as IconFamily,
     color: "#94a3b8",
     label: prettyType(type),
     unit: "",

@@ -10,7 +10,7 @@ import {
   TextInput,
   ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 
 import { ScreenHeader } from "@/src/components/ScreenHeader";
@@ -195,7 +195,11 @@ export default function DevicesScreen() {
                     },
                   ]}
                 >
-                  <Ionicons name={meta.icon} size={22} color={meta.color} />
+                  {meta.iconFamily === "material" ? (
+                    <MaterialCommunityIcons name={meta.icon} size={22} color={meta.color} />
+                  ) : (
+                    <Ionicons name={meta.icon} size={22} color={meta.color} />
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={styles.cardTitleRow}>

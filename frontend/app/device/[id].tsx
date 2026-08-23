@@ -9,7 +9,7 @@ import {
   RefreshControl,
   Dimensions,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -245,7 +245,7 @@ export default function DeviceDetail() {
         },
       ];
     }
-    // Generic (pH / TDS / Conductivity) — one primary reading + battery/signal side stats.
+    // Generic (pH / TDS / Conductivity / DO / STP / Chlorine) — one primary reading + battery/signal side stats.
     const m = instrumentMeta(kind);
     return [
       {
@@ -255,6 +255,7 @@ export default function DeviceDetail() {
         unit: m.unit,
         decimals: 2,
         icon: m.icon,
+        iconFamily: m.iconFamily,
         color: m.color,
       },
       {
@@ -386,7 +387,11 @@ export default function DeviceDetail() {
                     { backgroundColor: `${m.color}22`, borderColor: `${m.color}44` },
                   ]}
                 >
-                  <Ionicons name={m.icon} size={16} color={m.color} />
+                  {(m as any).iconFamily === "material" ? (
+                    <MaterialCommunityIcons name={m.icon} size={16} color={m.color} />
+                  ) : (
+                    <Ionicons name={m.icon} size={16} color={m.color} />
+                  )}
                 </View>
                 <Text style={styles.metricLabel}>{m.label}</Text>
                 <View style={styles.metricValRow}>

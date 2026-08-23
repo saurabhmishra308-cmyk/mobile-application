@@ -297,6 +297,254 @@ export type CustomerProfile = {
   [k: string]: any;
 };
 
+// ── Last-data enrichment ────────────────────────────────────────────────
+// The upstream `/api/instrument-registry/last-data` endpoint doesn't
+// understand every field the mobile app supports (DWLR firmware v2 renames,
+// AFCONS flowmeter litres/m³ scaling, water-quality analyzer HTTP feeds).
+// This helper fixes all three so the Dashboard cards always show live values
+// when the underlying `latest` reading is present.
+//
+//   1. For DWLR / Flowmeter cards with empty `last_values` but a populated
+//      `latest`, we rebuild the chips locally using the SAME formulas as the
+//      client-side fallback path (flowmeter values divided by 1000 → m³).
+//   2. For DO / STP / Chlorine analyzers (instrument_type = do_meter etc.),
+//      we merge in the freshest reading from `/api/water-quality/latest`.
+function buildChipsFromLatest(type: string, latest: Record<string, any>): Record<string, string> {
+  const chips: Record<string, string> = {};
+  const pick = (
+    keys: string[],
+    label: string,
+    unit: string,
+    decimals = 2,
+    divideBy = 1,
+  ) => {
+    for (const k of keys) {
+      const v = latest?.[k];
+      if (v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v))) {
+        chips[label] = `${(Number(v) / divideBy).toFixed(decimals)}${unit}`;
+        return;
+      }
+    }
+  };
+
+  if (type === "dwlr") {
+    pick(["water_level", "level", "depth", "LVL", "RAW", "D_SEN"], "Level", " m", 2);
+    pick(
+      ["water_temperature", "wtemp", "temperature", "temp", "WTEMP", "ATEMP"],
+      "Temp",
+      "°C",
+      1,
+    );
+    pick(["battery", "battery_v", "bat", "voltage", "BVOLT"], "Battery", " V", 2);
+  } else if (type === "flowmeter") {
+    // AFCONS flowmeter: every rate/totalizer value is in litres; /1000.
+    pick(
+      ["flow_rate_m3h", "flow_rate_lph", "flow_rate", "rate", "flow", "flowrate"],
+      "Flow",
+      " m³/h",
+      3,
+      1000,
+    );
+    pick(
+      [
+        "totaliser_end_reading",
+        "forward_totalizer",
+        "totalizer",
+        "totaliser",
+        "cumulative_flow",
+        "total",
+        "final_forward_totalizer",
+      ],
+      "Total",
+      " m³",
+      3,
+      1000,
+    );
+    pick(["battery", "battery_v", "bat", "voltage", "BVOLT"], "Battery", " V", 2);
+  } else if (type === "ph") {
+    pick(["ph", "PH", "value", "reading"], "pH", "", 2);
+    pick(["battery", "battery_v", "bat", "voltage"], "Battery", " V", 2);
+  } else if (type === "tds") {
+    pick(["tds", "TDS", "value", "reading"], "TDS", " ppm", 0);
+    pick(["battery", "battery_v", "bat", "voltage"], "Battery", " V", 2);
+  } else if (type === "conductivity") {
+    pick(["conductivity", "CONDUCTIVITY", "ec", "EC", "value", "reading"], "EC", " µS/cm", 0);
+    pick(["battery", "battery_v", "bat", "voltage"], "Battery", " V", 2);
+  } else {
+    pick(["value", "reading", type], "Value", "", 2);
+    pick(["battery", "battery_v", "bat", "voltage"], "Battery", " V", 2);
+    pick(["signal", "rssi", "SIGNAL"], "Signal", "", 0);
+  }
+  return chips;
+}
+
+function enrichWithWaterQuality(
+  primary: LastDataResponse,
+  wq: WaterQualityLatest | null,
+  extra?: {
+    dwlrByHw?: Map<string, Record<string, any>>;
+    fmByHw?: Map<string, Record<string, any>>;
+  },
+): LastDataResponse {
+  // WQ analyzer map (do_meter / stp_meter / chlorine_meter).
+  type WqEntry = {
+    ts: string | null;
+    values: Record<string, number>;
+    meta: Record<string, WaterQualityMeta>;
+    group: "stp" | "do" | "chlorine";
+  };
+  const byHw = new Map<string, WqEntry>();
+
+  if (wq) {
+    const push = (
+      group: "stp" | "do" | "chlorine",
+      readings: WaterQualityReading[] | undefined,
+      meta: Record<string, WaterQualityMeta> | undefined,
+    ) => {
+      if (!readings) return;
+      for (const r of readings) {
+        const hw = String(r?.hardware_id || "").toLowerCase();
+        if (!hw) continue;
+        const ts = (r as any)?.timestamp || (r as any)?.ts || null;
+        const values: Record<string, number> = {};
+        for (const k of Object.keys(meta || {})) {
+          const v = (r as any)[k];
+          const n = v !== null && v !== undefined && v !== "" ? Number(v) : NaN;
+          if (!Number.isNaN(n)) values[k] = n;
+        }
+        const prev = byHw.get(hw);
+        if (!prev || (ts && (!prev.ts || new Date(ts) > new Date(prev.ts)))) {
+          byHw.set(hw, { ts, values, meta: meta || {}, group });
+        }
+      }
+    };
+    push("stp", wq.stp, wq.stp_params_meta);
+    push("do", wq.do, wq.do_params_meta);
+    push("chlorine", wq.chlorine, wq.chlorine_params_meta);
+  }
+
+  const isAnalyzer = (t: string) =>
+    /^(do|stp|chlorine)(_meter)?$/.test(t);
+
+  const now = Date.now();
+  const devices = (primary.devices || []).map((d) => {
+    const t = (d.instrument_type || "").toLowerCase();
+    const upstreamChips = d.last_values || {};
+    const hasChips = Object.keys(upstreamChips).length > 0;
+
+    // ── Step 1: water-quality analyzer merge ──────────────────────────
+    if (isAnalyzer(t)) {
+      const wqEntry = byHw.get(String(d.hardware_id || "").toLowerCase());
+      if (wqEntry) {
+        const ranked = Object.entries(wqEntry.values).sort(([a], [b]) => {
+          const aHasBand =
+            wqEntry.meta[a]?.safe_min !== undefined || wqEntry.meta[a]?.safe_max !== undefined ? 0 : 1;
+          const bHasBand =
+            wqEntry.meta[b]?.safe_min !== undefined || wqEntry.meta[b]?.safe_max !== undefined ? 0 : 1;
+          return aHasBand - bHasBand;
+        });
+        const merged: Record<string, string> = { ...upstreamChips };
+        for (const [k, v] of ranked.slice(0, 3)) {
+          const unit = wqEntry.meta[k]?.unit_default || "";
+          const decimals = k.toLowerCase().includes("ph") ? 2 : 2;
+          const label = k
+            .replace(/_/g, " ")
+            .replace(/\b(\w)/g, (m) => m.toUpperCase())
+            .replace(/\bDo\b/, "DO")
+            .replace(/\bPh\b/, "pH")
+            .replace(/\bBod\b/, "BOD")
+            .replace(/\bCod\b/, "COD")
+            .replace(/\bTss\b/, "TSS");
+          merged[label] = `${v.toFixed(decimals)}${unit ? ` ${unit}` : ""}`;
+        }
+        const wqTs = wqEntry.ts ? new Date(wqEntry.ts).getTime() : null;
+        const existingTs = d.last_seen ? new Date(d.last_seen).getTime() : null;
+        const bestTs =
+          wqTs !== null && (existingTs === null || wqTs > existingTs) ? wqTs : existingTs;
+        const secondsSinceLast =
+          bestTs !== null ? Math.max(0, Math.round((now - bestTs) / 1000)) : d.seconds_since_last;
+        let status: LastDataStatus = d.status;
+        if (secondsSinceLast !== null && secondsSinceLast !== undefined) {
+          if (secondsSinceLast < 15 * 60) status = "live";
+          else if (secondsSinceLast < 6 * 3600) status = "stale";
+          else status = "silent";
+        }
+        return {
+          ...d,
+          last_values: merged,
+          last_seen: bestTs !== null ? new Date(bestTs).toISOString() : d.last_seen,
+          seconds_since_last: secondsSinceLast,
+          status,
+        };
+      }
+      return d;
+    }
+
+    // ── Step 2: DWLR / Flowmeter chip rebuild ─────────────────────────
+    // Upstream sometimes returns empty last_values because it doesn't
+    // recognise firmware v2 field names (LVL, WTEMP, BVOLT). Rebuild them
+    // client-side from the raw `latest` payload if we have one — or from
+    // the dedicated /latest endpoint we fetched in parallel.
+    const latestFromExtra =
+      t === "dwlr"
+        ? extra?.dwlrByHw?.get(d.hardware_id)
+        : t === "flowmeter"
+          ? extra?.fmByHw?.get(d.hardware_id)
+          : undefined;
+    const rawLatest =
+      d.latest && Object.keys(d.latest).length > 0
+        ? d.latest
+        : latestFromExtra;
+
+    if (!hasChips && rawLatest && Object.keys(rawLatest).length > 0) {
+      const rebuilt = buildChipsFromLatest(t, rawLatest);
+      if (Object.keys(rebuilt).length > 0) {
+        // Also refresh timestamp + status if the latest has a fresher time.
+        const rawTs =
+          (rawLatest as any).timestamp ||
+          (rawLatest as any).ts ||
+          (rawLatest as any).received_at ||
+          null;
+        const fwTs = readingTsFromFirmware((rawLatest as any).TIME);
+        const bestRawTs = rawTs || fwTs || d.last_seen || null;
+        const secondsSinceLast = bestRawTs
+          ? Math.max(0, Math.round((now - new Date(bestRawTs).getTime()) / 1000))
+          : d.seconds_since_last;
+        let status: LastDataStatus = d.status;
+        if (secondsSinceLast !== null && secondsSinceLast !== undefined) {
+          if (secondsSinceLast < 15 * 60) status = "live";
+          else if (secondsSinceLast < 6 * 3600) status = "stale";
+          else status = "silent";
+        }
+        return {
+          ...d,
+          latest: rawLatest as any,
+          last_values: rebuilt,
+          last_seen: bestRawTs || d.last_seen,
+          seconds_since_last: secondsSinceLast,
+          status,
+        };
+      }
+    }
+
+    return d;
+  });
+
+  return { ...primary, devices };
+}
+
+// Firmware ts helper — YYMMDDHHmmss → ISO string (mirrors format.ts helper
+// but kept local to avoid a circular import between client.ts and format.ts).
+function readingTsFromFirmware(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length !== 12) return null;
+  const year = 2000 + Number(digits.slice(0, 2));
+  const iso = `${year}-${digits.slice(2, 4)}-${digits.slice(4, 6)}T${digits.slice(6, 8)}:${digits.slice(8, 10)}:${digits.slice(10, 12)}+05:30`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 export const api = {
   me: () => authed<UserProfile>("/api/auth/me"),
   instruments: () =>
@@ -306,17 +554,49 @@ export const api = {
   // Falls back gracefully if the upstream doesn't have this endpoint yet
   // (HTTP 404 / 405) — we synthesise the same shape from the endpoints
   // that DO exist: instruments + dwlrLatest + flowmeterLatest + offline.
+  //
+  // 🟢 IMPORTANT: The upstream `/last-data` endpoint only inspects the
+  // dwlr_readings / flowmeter_readings collections. STP / DO / Chlorine
+  // analyzer devices (instrument_type = "do_meter", "stp_meter",
+  // "chlorine_meter") get pushed via HTTP → the water-quality collection —
+  // so their `last_values` come back empty and their status is "silent".
+  // We fix that here by fetching `/api/water-quality/latest` in parallel
+  // and merging DO / STP / Chlorine readings into the device chips.
   lastData: async (): Promise<LastDataResponse> => {
     try {
-      return await authed<LastDataResponse>("/api/instrument-registry/last-data");
+      const [primary, wq, dw, fm] = await Promise.allSettled([
+        authed<LastDataResponse>("/api/instrument-registry/last-data"),
+        authed<WaterQualityLatest>("/api/water-quality/latest"),
+        authed<{ readings: DwlrReading[] }>("/api/instruments/dwlr/latest"),
+        authed<{ flowmeters: FlowmeterReading[] }>("/api/flowmeter/latest"),
+      ]);
+      if (primary.status === "rejected") throw primary.reason;
+      const dwlrByHw = new Map<string, Record<string, any>>();
+      if (dw.status === "fulfilled") {
+        for (const r of dw.value.readings || []) {
+          if (r?.hardware_id) dwlrByHw.set(r.hardware_id, r as any);
+        }
+      }
+      const fmByHw = new Map<string, Record<string, any>>();
+      if (fm.status === "fulfilled") {
+        for (const r of fm.value.flowmeters || []) {
+          if (r?.hardware_id) fmByHw.set(r.hardware_id, r as any);
+        }
+      }
+      return enrichWithWaterQuality(
+        primary.value,
+        wq.status === "fulfilled" ? wq.value : null,
+        { dwlrByHw, fmByHw },
+      );
     } catch (e: any) {
       if (e?.status !== 404 && e?.status !== 405) throw e;
       // ── Client-side fallback ─────────────────────────────────────────
-      const [insR, dwR, fmR, offR] = await Promise.allSettled([
+      const [insR, dwR, fmR, offR, wqR] = await Promise.allSettled([
         authed<{ instruments: Instrument[] }>("/api/instrument-registry"),
         authed<{ readings: DwlrReading[] }>("/api/instruments/dwlr/latest"),
         authed<{ flowmeters: FlowmeterReading[] }>("/api/flowmeter/latest"),
         authed<{ offline: OfflineDevice[] }>("/api/alerts/offline?hours=24"),
+        authed<WaterQualityLatest>("/api/water-quality/latest"),
       ]);
       const instruments =
         insR.status === "fulfilled" ? insR.value.instruments || [] : [];
@@ -437,11 +717,14 @@ export const api = {
           latest: latest as Record<string, any> | null,
         };
       });
-      return {
-        devices,
-        count: devices.length,
-        generated_at: new Date().toISOString(),
-      };
+      return enrichWithWaterQuality(
+        {
+          devices,
+          count: devices.length,
+          generated_at: new Date().toISOString(),
+        },
+        wqR.status === "fulfilled" ? wqR.value : null,
+      );
     }
   },
 

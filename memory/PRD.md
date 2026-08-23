@@ -1,6 +1,10 @@
 # Envirolytics Monitor — Mobile app (Expo, iOS + Android)
 
 
+## Latest changes (v1.0.2)
+- **Dashboard live-data fix**: `api.lastData()` now enriches the upstream `/api/instrument-registry/last-data` response by fetching `/api/instruments/dwlr/latest`, `/api/flowmeter/latest` and `/api/water-quality/latest` in parallel. Any device the upstream returned with empty `last_values` (typical for DWLR firmware v2 uppercase fields, AFCONS flowmeters emitting litres, or Do_meter / STP / Chlorine analyzers whose data lives in the water-quality collection) is patched client-side and its status is recomputed (LIVE/STALE/SILENT) from the freshest timestamp. This eliminates the phantom "Waiting for first reading…" state on Dashboard cards.
+- **Analyzer icons**: DO / STP / Chlorine cards now render authentic lab glyphs via MaterialCommunityIcons — `water-percent` (teal) for DO Analyzers, `test-tube` (blue) for STP, `flask-round-bottom-outline` (yellow) for Chlorine — replacing the generic CPU chip fallback. `LiveDeviceCard`, `devices.tsx` and `device/[id].tsx` all honour the new `iconFamily` field on `INSTRUMENT_META`.
+
 ## Latest changes (v1.0.1)
 - **Admin = GOD mode**: admins are excluded from the 365-day auto-deactivate cron server-side and shown with a golden "GOD · No expiry" badge in Manage Users. UI blocks deactivating a fellow admin. Backend rejects auto-expiry for role in {admin, superadmin, owner, god} or `is_admin: true`.
 - **DWLR firmware v2 aliases**: mobile app now transparently accepts both legacy (`water_level`, `temperature`, `battery`, `timestamp`) and new uppercase firmware fields (`LVL`, `RAW`, `WTEMP`, `ATEMP`, `BVOLT`, `SIGNAL`, `TIME` in YYMMDDHHmmss). Centralised in `src/utils/format.ts::READING_KEYS`.

@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration-8 verification of AFCONS flowmeter litres→m³ scaling, full-weather-card rework, and LiveDeviceCard tap regression fix. ALL 4 PRIMARY REVIEW GOALS PASS. (1) Flowmeter chips on Dashboard now show scaled units — 'Flowmeter_1' shows FLOW=11.161 m³/h + TOTAL=335.355 m³ (was 11160.580 / 335355.000 before the /1000 pickReadingValueScaled fix). Second flowmeter '8279/0' shows FLOW=0.000 / TOTAL=602.034. Both < the < 100 m³/h and < 1000 m³ thresholds requested. (2) Tapping live-card-pressable-Flowmeter_1 successfully navigates to /device/Flowmeter_1?type=flowmeter&label=FLOWMETER&location=NEAR%20CASTING%20YARD — previous RN-Web tap regression is GONE (Pressable-wrapping-content + pointerEvents='none' gradient works). (3) Device-detail Flow Rate metric is scaled: 11.161 m³/h and Totalizer 335.355 m³. Raw firmware field 'Flow rate lph=11160580' is preserved verbatim in the Latest Reading diagnostic table (correct — raw JSON is not scaled). (4) Weather card (testID='weather-card') now shows 6+ stat tiles: Temperature 29.4°C, description, Feels-like 37°C, HUMIDITY 84%, PRESSURE 1004 hPa, WIND 0.6 m/s · 239°, RAIN 1H 0 mm, COORD 26.847/80.946, UPDATED fromNow, and SOURCE · OPEN-METEO footer — matches the full-panel spec. (5) Greeting shows 'Good morning, Admin' — friendlyName() correctly strips the company brand from 'Envirolytics Admin' → 'Admin'. (6) All 5 protected tabs (/devices, /quality, /reports, /alerts, /profile) navigate cleanly with zero pageerror. (7) Backend regression 4/4 PASS: GET /api/, GET /api/health, POST /api/admin/run-auto-deactivate, POST/GET /api/email-subscriptions all 200. Console noise unchanged from iter-7 (shadow*/textShadow*/pointerEvents cosmetic RN-Web deprecation warnings only). No red-screen crashes. No deprecated Expo packages detected. No SafeAreaView issues detected. Two upstream 405s on /api/instrument-registry/last-data are caught by api.lastData() client fallback (unchanged, working as designed).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter8.py",
+    "/app/test_reports/pytest/iter8_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "pickReadingValueScaled helper in /app/frontend/src/utils/format.ts is well-designed: takes an explicit divideBy plus a nativeM3Keys allowlist so future firmware that reports native m³/h in a specific field (e.g., 'flow_rate_m3h' if it ever means actual m³/h) can be excluded from the /1000 scaling. Recommend documenting which keys are currently in nativeM3Keys once upstream confirms field semantics.",
+    "LiveDeviceCard now uses a real Pressable wrapping the whole card body with pointerEvents='none' on the gradient background — RN-Web tap works reliably now. onPressIn/onPressOut spring scale animation still fires.",
+    "Weather card gradient wash + pastel per-stat icons are consistent with the redesigned dashboard aesthetic. Grid layout adapts to available fields (skips rain_1h/coord when upstream omits them — verified via presence check in code path).",
+    "friendlyName(full_name, email) tokenises full_name and drops the brand token ('Envirolytics'); falls back to email local-part if full_name is only a company. Robust for typical admin/user names.",
+    "Latest Reading raw JSON table on device detail still shows unscaled firmware fields (Flow rate lph=11160580, Forward totalizer=335355). This is CORRECT — diagnostic table is meant to expose raw upstream payload for troubleshooting. Only the display-primary chips + chart are scaled."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter8.py (new — 4 pytest cases, all pass)"
+  ],
+  "success_rate": {
+    "backend": "4/4 (100%)",
+    "frontend": "9/9 review points PASS — flowmeter scaling (dashboard + detail + implied chart), tap-to-navigate regression fixed, weather full grid, greeting friendly, no crashes on any of 5 tabs, no deprecated packages, no SafeAreaView issues."
+  },
+  "seed_data_creation": "One TEST_iter8_* push_users doc created during /api/email-subscriptions round-trip test (same benign pattern as iter5/6/7).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "AFCONS flowmeter firmware reports FLOW in l/h (field 'Flow rate lph') and TOTALIZER in litres (field 'Forward totalizer'), even though the upstream JSON key is 'flow_rate_m3h' — that name is misleading upstream. The mobile app now scales /1000 on the display layer via pickReadingValueScaled in /app/frontend/src/utils/format.ts. If upstream ever starts sending true m³/h values, add those keys to the nativeM3Keys allowlist to skip the divide. Dashboard testIDs: dashboard-hero, hero-online, hero-total, hero-ring, hero-ring-pct, dashboard-live-count, live-card-<hw_id>, live-card-pressable-<hw_id>, header-bell, header-avatar, weather-card. Login testIDs: login-email-input / login-password-input / login-submit-button. Onboarding skip: localStorage 'envmon:onboarding-seen'='1'. Admin creds admin@envirolytics.com / Admin@Envirolytics2026 valid against monitor.envirolytics.in. Upstream /api/instrument-registry/last-data still returns 405 — api.lastData() catches + falls back client-side.",
+  "rca_of_issue": "N/A — all reported bugs verified fixed. Prior iter-7 issues (litre display, tap regression, greeting brand) all resolved cleanly. Screenshots captured at /tmp/dash.png, /tmp/weather.png, /tmp/after_tap.png confirm the visual state."
+}
