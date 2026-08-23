@@ -19,7 +19,9 @@
       "supportsTablet": true,
       "bundleIdentifier": "in.envirolytics.mobile",
       "buildNumber": "2",
-      "associatedDomains": ["applinks:mobileapp.envirolytics.in"],
+      "associatedDomains": [
+        "applinks:mobileapp.envirolytics.in"
+      ],
       "config": {
         "usesNonExemptEncryption": false
       },
@@ -61,7 +63,10 @@
               "host": "mobileapp.envirolytics.in"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -101,7 +106,12 @@
     },
     "extra": {
       "privacyPolicyUrl": "https://monitor.envirolytics.in/policies",
-      "supportEmail": "info@envirolytics.in"
-    }
+      "supportEmail": "info@envirolytics.in",
+      "router": {},
+      "eas": {
+        "projectId": "929a80c6-5a07-41af-8d83-ac9351e9de80"
+      }
+    },
+    "owner": "saurabh10s-team"
   }
 }
