@@ -26,6 +26,7 @@ import {
   fromNow,
   instrumentMeta,
   pickReadingValue,
+  pickReadingValueScaled,
   prettyType,
   readingTs,
 } from "@/src/utils/format";
@@ -132,10 +133,23 @@ export default function DeviceDetail() {
       : kind === "dwlr"
         ? [...READING_KEYS.waterLevel]
         : meta.primaryKeys;
+    const NATIVE_M3 = new Set<string>([]); // AFCONS flowmeter: all values are in litres.
     return history
       .map((r: Record<string, any>) => {
         const ts = readingTs(r);
-        const v = pickReadingValue(r, keys);
+        // For flowmeter, divide legacy litre fields by 1000 for the chart too.
+        let v: number | null = null;
+        if (kind === "flowmeter") {
+          for (const k of keys) {
+            const raw = r?.[k];
+            if (raw !== null && raw !== undefined && raw !== "" && !Number.isNaN(Number(raw))) {
+              v = NATIVE_M3.has(k) ? Number(raw) : Number(raw) / 1000;
+              break;
+            }
+          }
+        } else {
+          v = pickReadingValue(r, keys);
+        }
         if (!ts || v === null) return null;
         const t = new Date(ts).getTime();
         if (Number.isNaN(t)) return null;
@@ -159,11 +173,17 @@ export default function DeviceDetail() {
   const primaryMetrics = useMemo(() => {
     if (!latest) return [];
     if (kind === "flowmeter") {
+      // AFCONS flowmeter reports values in LITRES; /1000 for m³ display.
       return [
         {
           label: "Flow Rate",
           key: "flow",
-          value: pickReadingValue(latest, [...READING_KEYS.flowRate]),
+          value: pickReadingValueScaled(
+            latest,
+            [...READING_KEYS.flowRate],
+            1000,
+            [],
+          ),
           unit: "m³/h",
           decimals: 3,
           icon: "speedometer-outline" as const,
@@ -172,7 +192,12 @@ export default function DeviceDetail() {
         {
           label: "Totalizer",
           key: "totalizer",
-          value: pickReadingValue(latest, [...READING_KEYS.totalizer]),
+          value: pickReadingValueScaled(
+            latest,
+            [...READING_KEYS.totalizer],
+            1000,
+            [],
+          ),
           unit: "m³",
           decimals: 3,
           icon: "layers-outline" as const,

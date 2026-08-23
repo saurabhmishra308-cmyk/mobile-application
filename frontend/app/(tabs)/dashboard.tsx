@@ -42,6 +42,18 @@ function greeting(): string {
   return "Good night";
 }
 
+// Prefer a real given name — if full_name looks like a company (contains
+// "Admin", "Envirolytics", "Sustainability") or is missing, fall back to the
+// email local-part which is usually the human's identifier.
+function friendlyName(fullName?: string | null, email?: string | null): string {
+  const first = (fullName || "").split(/\s+/).filter(Boolean)[0];
+  const looksLikeCompany = /^(admin|envirolytics|sustainability|test)/i.test(first || "");
+  if (first && !looksLikeCompany) return first;
+  const local = (email || "").split("@")[0];
+  if (local) return local.charAt(0).toUpperCase() + local.slice(1);
+  return "there";
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const { user, signOut } = useAuth();
@@ -128,7 +140,7 @@ export default function Dashboard() {
     <View style={styles.safe} testID="dashboard-screen">
       <ScreenHeader
         eyebrow={user?.location_name ? `SITE · ${user.location_name.toUpperCase()}` : "ENVIROLYTICS · MONITOR"}
-        title={`${greeting()}, ${user?.full_name?.split(" ")[0] || "there"}`}
+        title={`${greeting()}, ${friendlyName(user?.full_name, user?.email)}`}
         right={
           <HeaderActions
             fullName={user?.full_name || user?.email}
@@ -256,43 +268,99 @@ export default function Dashboard() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Live Weather · {weather.name || "Site"}</Text>
             <View style={styles.weatherCard} testID="weather-card">
-              <View style={{ flex: 1 }}>
-                <Text style={styles.weatherTemp}>
-                  {fmtNum(weather.main?.temp, 1)}
-                  <Text style={styles.weatherUnit}>°C</Text>
-                </Text>
-                <Text style={styles.weatherDesc}>
-                  {weather.weather?.[0]?.description
-                    ? weather.weather[0].description.replace(/^./, (c) => c.toUpperCase())
-                    : "—"}
-                </Text>
-                <View style={styles.weatherMeta}>
-                  <Ionicons name="water-outline" size={14} color={colors.water} />
-                  <Text style={styles.weatherMetaText}>
-                    Humidity {fmtNum(weather.main?.humidity, 0)}%
+              <LinearGradient
+                colors={["rgba(56, 189, 248, 0.14)", "rgba(3, 17, 31, 0)"]}
+                style={StyleSheet.absoluteFill}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                pointerEvents="none"
+              />
+              <View style={styles.weatherTopRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.weatherTemp}>
+                    {fmtNum(weather.main?.temp, 1)}
+                    <Text style={styles.weatherUnit}>°C</Text>
                   </Text>
-                  <Ionicons
-                    name="speedometer-outline"
-                    size={14}
-                    color={colors.textSecondary}
-                    style={{ marginLeft: spacing.md }}
-                  />
-                  <Text style={styles.weatherMetaText}>
-                    Wind {fmtNum(weather.wind?.speed, 1)} m/s
+                  <Text style={styles.weatherDesc}>
+                    {weather.weather?.[0]?.description
+                      ? weather.weather[0].description.replace(/^./, (c) => c.toUpperCase())
+                      : (weather as any).weather_code !== undefined
+                        ? `Code ${(weather as any).weather_code}`
+                        : "—"}
+                  </Text>
+                  {(weather.main as any)?.feels_like !== undefined ? (
+                    <Text style={styles.weatherFeels}>
+                      Feels like {fmtNum((weather.main as any).feels_like, 1)}°C
+                    </Text>
+                  ) : null}
+                </View>
+                <Ionicons
+                  name={
+                    (weather.weather?.[0]?.main || "").toLowerCase().includes("rain") ||
+                    ((weather as any).rain && (weather as any).rain["1h"] > 0)
+                      ? "rainy-outline"
+                      : (weather.weather?.[0]?.main || "").toLowerCase().includes("cloud")
+                        ? "cloudy-outline"
+                        : "sunny-outline"
+                  }
+                  size={54}
+                  color={colors.water}
+                />
+              </View>
+
+              {/* ── Full weather grid — every field the upstream returns ── */}
+              <View style={styles.weatherGrid}>
+                <View style={styles.weatherStat}>
+                  <Ionicons name="water-outline" size={14} color={colors.water} />
+                  <Text style={styles.weatherStatLbl}>Humidity</Text>
+                  <Text style={styles.weatherStatVal}>{fmtNum(weather.main?.humidity, 0)}%</Text>
+                </View>
+                <View style={styles.weatherStat}>
+                  <Ionicons name="speedometer-outline" size={14} color={colors.warning} />
+                  <Text style={styles.weatherStatLbl}>Pressure</Text>
+                  <Text style={styles.weatherStatVal}>{fmtNum((weather.main as any)?.pressure, 0)} hPa</Text>
+                </View>
+                <View style={styles.weatherStat}>
+                  <Ionicons name="cloudy-night-outline" size={14} color={colors.eco} />
+                  <Text style={styles.weatherStatLbl}>Wind</Text>
+                  <Text style={styles.weatherStatVal}>
+                    {fmtNum(weather.wind?.speed, 1)} m/s
+                    {(weather.wind as any)?.deg !== undefined
+                      ? ` · ${Math.round((weather.wind as any).deg)}°`
+                      : ""}
                   </Text>
                 </View>
+                <View style={styles.weatherStat}>
+                  <Ionicons name="rainy-outline" size={14} color={colors.water} />
+                  <Text style={styles.weatherStatLbl}>Rain 1h</Text>
+                  <Text style={styles.weatherStatVal}>
+                    {fmtNum(((weather as any).rain && (weather as any).rain["1h"]) || 0, 1)} mm
+                  </Text>
+                </View>
+                {(weather as any).coord ? (
+                  <View style={styles.weatherStat}>
+                    <Ionicons name="location-outline" size={14} color={colors.textSecondary} />
+                    <Text style={styles.weatherStatLbl}>Coord</Text>
+                    <Text style={styles.weatherStatVal} numberOfLines={1}>
+                      {fmtNum((weather as any).coord.lat, 3)}, {fmtNum((weather as any).coord.lon, 3)}
+                    </Text>
+                  </View>
+                ) : null}
+                {(weather as any).dt ? (
+                  <View style={styles.weatherStat}>
+                    <Ionicons name="time-outline" size={14} color={colors.textMuted} />
+                    <Text style={styles.weatherStatLbl}>Updated</Text>
+                    <Text style={styles.weatherStatVal} numberOfLines={1}>
+                      {fromNow(String((weather as any).dt))}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-              <Ionicons
-                name={
-                  (weather.weather?.[0]?.main || "").toLowerCase().includes("rain")
-                    ? "rainy-outline"
-                    : (weather.weather?.[0]?.main || "").toLowerCase().includes("cloud")
-                      ? "cloudy-outline"
-                      : "sunny-outline"
-                }
-                size={54}
-                color={colors.water}
-              />
+              {(weather as any).source ? (
+                <Text style={styles.weatherSource}>
+                  Source · {String((weather as any).source)}
+                </Text>
+              ) : null}
             </View>
           </View>
         ) : null}
@@ -507,12 +575,21 @@ const styles = StyleSheet.create({
   },
   weatherCard: {
     padding: spacing.lg,
-    backgroundColor: colors.bgElevated,
     borderRadius: radius.lg,
     borderWidth: 1,
     borderColor: colors.border,
+    backgroundColor: colors.bgElevated,
+    overflow: "hidden",
+    shadowColor: "#0ea5e9",
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 6,
+  },
+  weatherTopRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing.md,
   },
   weatherTemp: {
     color: colors.text,
@@ -538,6 +615,53 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   weatherMetaText: { color: colors.text, fontSize: 12, marginLeft: 4 },
+  weatherFeels: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 4,
+    letterSpacing: 0.2,
+  },
+  weatherGrid: {
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  weatherStat: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 100,
+    padding: 8,
+    borderRadius: radius.md,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 3,
+  },
+  weatherStatLbl: {
+    color: colors.textSecondary,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    fontWeight: "800",
+    textTransform: "uppercase",
+  },
+  weatherStatVal: {
+    color: colors.text,
+    fontSize: 13,
+    fontFamily: font.mono,
+    fontWeight: "800",
+  },
+  weatherSource: {
+    marginTop: spacing.sm,
+    color: colors.textMuted,
+    fontSize: 10,
+    letterSpacing: 1.4,
+    textAlign: "right",
+    textTransform: "uppercase",
+  },
   listRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -364,14 +364,23 @@ export const api = {
         else status = "silent";
 
         // Build 3 short display chips from the freshest fields we have.
+        // NOTE: The AFCONS flowmeter physically reports LITRES (not m³) even
+        // when the upstream labels the field `flow_rate_m3h`. So every
+        // flowmeter numeric field must be divided by 1000 for display.
         const chips: Record<string, string> = {};
         if (latest) {
           const raw = latest as Record<string, any>;
-          const pick = (keys: string[], label: string, unit: string, decimals = 2) => {
+          const pick = (
+            keys: string[],
+            label: string,
+            unit: string,
+            decimals = 2,
+            divideBy = 1,
+          ) => {
             for (const k of keys) {
               const v = raw[k];
               if (v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v))) {
-                chips[label] = `${Number(v).toFixed(decimals)}${unit}`;
+                chips[label] = `${(Number(v) / divideBy).toFixed(decimals)}${unit}`;
                 return;
               }
             }
@@ -381,7 +390,14 @@ export const api = {
             pick(["water_temperature", "wtemp", "temperature", "temp", "WTEMP", "ATEMP"], "Temp", "°C", 1);
             pick(["battery", "battery_v", "bat", "voltage", "BVOLT"], "Battery", " V", 2);
           } else if (type === "flowmeter") {
-            pick(["flow_rate_m3h", "flow_rate", "rate", "flow", "flowrate"], "Flow", " m³/h", 3);
+            // AFCONS flowmeter: every rate/totalizer value is in litres; /1000.
+            pick(
+              ["flow_rate_m3h", "flow_rate_lph", "flow_rate", "rate", "flow", "flowrate"],
+              "Flow",
+              " m³/h",
+              3,
+              1000,
+            );
             pick(
               [
                 "totaliser_end_reading",
@@ -395,10 +411,10 @@ export const api = {
               "Total",
               " m³",
               3,
+              1000,
             );
             pick(["battery", "battery_v", "bat", "voltage", "BVOLT"], "Battery", " V", 2);
           } else {
-            // pH / TDS / Conductivity — pick "value" as the headline.
             pick(["value", "reading", type], "Value", "", 2);
             pick(["battery", "battery_v", "bat", "voltage"], "Battery", " V", 2);
             pick(["signal", "rssi", "SIGNAL"], "Signal", "", 0);

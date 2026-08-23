@@ -118,6 +118,27 @@ export function pickReadingValue(r: Record<string, any>, keys: string[]): number
   return null;
 }
 
+// Same as pickReadingValue but scales legacy litre-based fields to m³ before
+// returning. Keys listed in `nativeM3Keys` are returned as-is (already in m³).
+// Every other key that matches gets divided by `divideBy`. Used by the
+// flowmeter display path so 11 122.270 l/h renders as 11.122 m³/h.
+export function pickReadingValueScaled(
+  r: Record<string, any>,
+  keys: string[],
+  divideBy: number,
+  nativeM3Keys: string[] = [],
+): number | null {
+  const nativeSet = new Set(nativeM3Keys);
+  for (const k of keys) {
+    const v = r?.[k];
+    if (v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v))) {
+      const scale = nativeSet.has(k) ? 1 : divideBy;
+      return Number(v) / scale;
+    }
+  }
+  return null;
+}
+
 // New DWLR firmware sends a compact "YYMMDDHHmmss" string (e.g. "260703135219").
 // Detect + convert to ISO so downstream chart / fromNow work uniformly.
 function _parseFirmwareTs(raw: unknown): string | null {

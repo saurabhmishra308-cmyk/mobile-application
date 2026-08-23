@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration-7 REDESIGNED DASHBOARD verification. Cold-launch → login (admin@envirolytics.com) → new Dashboard renders end-to-end without any red screen. All 8 review-requested UI elements are present and animating: (1) greeting 'Good morning, Envirolytics' (matches /^Good (morning|afternoon|evening|night), /), (2) header-bell + header-avatar testIDs visible+clickable in top-right, (3) dashboard-hero card renders with count-up hero-online='5', hero-total='5', animated hero-ring donut arc with hero-ring-pct='100%' centered, (4) mini stats row DWLR/Flow/Offline/Alerts all with pastel dots + count-up values (1 DWLR, 2 FLOW, 0 OFFLINE, 0 ALERTS), (5) LIVE DATA section header pill dashboard-live-count reads '3 / 5 LIVE' — pastel-green pill with LED dot, (6) 5 LiveDeviceCards render (live-card-Flowmeter_1, live-card-Flowmeter_2, live-card-DWLR_*, plus 2 DO-analyzer cards) — Flowmeter cards show FLOW '11122.270 m³/h' + TOTAL '333496.000 m³' chips with the requested 3-decimal precision AND the pulsing LIVE/STALE/SILENT LED text renders in the correct green/amber/red, (7) staggered fade+slide entrance visible in screenshots, (8) 20-second auto-refresh confirmed — after wait_for_timeout(22000) hero+live-count still present, still 5 cards, ZERO duplication, ZERO memory-crash, no console.error added. Backend regression 4/4 PASS: GET /api/ 200 ok/envirolytics-mobile-backend, GET /api/health 200 with int poll_interval_s, POST /api/admin/run-auto-deactivate 200 {status:scheduled}, POST/GET /api/email-subscriptions round-trips with weekly:true. All 5 protected tabs navigate without crash (/devices, /quality, /reports, /alerts, /profile). Upstream /api/instrument-registry/last-data returns 405 as expected — api.lastData() catches it and the client-side fallback (instruments + dwlrLatest + flowmeterLatest + offline) synthesises the 5-device grid successfully (visible in screenshots). Deprecated packages detected: none. SafeAreaView issues detected: none. Cosmetic web-only warnings (shadow*/textShadow*/pointerEvents) unchanged from prior iterations — no user impact. ONE FUNCTIONAL BUG FOUND: tapping a LiveDeviceCard does NOT navigate to /device/[id] on RN-Web preview — after clicking live-card-Flowmeter_1 and waiting 2.5s the URL remains /dashboard. Root cause is DOM stacking: the pressable View is rendered as the first child of Animated.View with StyleSheet.absoluteFill, so on RN-Web the flex-laid-out head/chips/footer siblings paint ON TOP and swallow the click before it reaches the responder overlay. On real iOS/Android this would still work (native responder system is Z-agnostic) but on the web preview it silently no-ops.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "LiveDeviceCard",
+        "issue": "Tapping the card does NOT navigate to /device/[id] on RN-Web preview. The pressable overlay (View with onStartShouldSetResponder / onResponderRelease) is inserted as the FIRST child of the outer Animated.View with StyleSheet.absoluteFill, but the head/chips/footer siblings are laid out AFTER it in DOM order and paint on top on the web. Touch/click events land on non-pressable children, so the overlay's onResponderRelease never fires. Reference: /app/frontend/src/components/LiveDeviceCard.tsx:102-109. Fix: replace the overlay pattern with a real TouchableOpacity/Pressable wrapping the entire card content, or move the absolute-fill overlay to the LAST child AND set pointerEvents='box-only' on it so it captures children's events. Reproduction: login → dashboard → click any LiveDeviceCard → observe URL stays on /dashboard.",
+        "testID": "live-card-*",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "dashboard",
+        "issues": [
+          "Greeting uses the FIRST TOKEN of full_name which for the admin user 'Envirolytics Admin' produces 'Good morning, Envirolytics' — reads as company-name rather than person-name. Consider preferring first_name field when available, or falling back to email local-part when the first token is the tenant/company brand. Cosmetic — not blocking."
+        ]
+      }
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_regression_iter7.py",
+    "/app/test_reports/pytest/iter7_results.xml"
+  ],
+  "action_items": [
+    "FIX LiveDeviceCard tap navigation on web (/app/frontend/src/components/LiveDeviceCard.tsx): wrap card content in a real Pressable/TouchableOpacity, OR move the absoluteFill responder <View> to be the LAST child so it renders on top in DOM order (RN-Web click ordering). Currently the card is visually present + animated but the primary CTA (open device detail) is a no-op on the web preview. Not verified on native — likely works on iOS/Android but should still be fixed for consistency.",
+    "OPTIONAL: refine greeting first-name extraction — for admin the first token of full_name is the company brand ('Envirolytics Admin' → 'Envirolytics'). Consider using user.first_name if returned by /auth/me, or splitting on last-space to prefer the given-name."
+  ],
+  "critical_code_review_comments": [
+    "LiveDeviceCard tap overlay is fragile on RN-Web (see ui_bugs). All other testIDs (hero, hero-online, hero-total, hero-ring, hero-ring-pct, dashboard-live-count, header-bell, header-avatar, live-card-*) are correctly wired and selectable.",
+    "api.lastData() fallback (client.ts:309-464) is well-guarded — catches HTTP 404/405 from upstream and reconstructs the {devices:LastDataDevice[]} shape from instruments + dwlrLatest + flowmeterLatest + offline. This is the code path that actually renders in production today (upstream returns 405). No crash observed.",
+    "20-second auto-refresh (dashboard.tsx:97) uses setInterval + cleared in the useEffect cleanup — verified no duplicate cards / no memory issue after 22s wait; still exactly 5 cards.",
+    "OnlineRing.tsx uses react-native-svg + Animated.createAnimatedComponent(Circle) to animate strokeDashoffset — renders correctly on web (screenshot shows the green→cyan gradient arc). No issue.",
+    "PulseIcon in (tabs)/_layout.tsx correctly starts/stops the withRepeat when focused toggles — no perf issue observed. Dynamic tab visibility (showDevices/showQuality/showReports/showAlerts) driven by api.lastData() + view_permissions — admin sees all 6 tabs as expected.",
+    "HeaderActions ring-bell animation uses withRepeat(withSequence(...), -1) — correctly gated on badgeCount>0 (currently 0 alerts so bell is static, which is correct behaviour)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_regression_iter7.py (new — 4 pytest cases covering iter-7 backend regression surface, all pass)"
+  ],
+  "success_rate": {
+    "backend": "4/4 (100%)",
+    "frontend": "7/8 review points PASS — hero card, count-ups, animated ring, mini stats, header bell+avatar, live-data pill, LiveDeviceCard grid, 20s auto-refresh, all 6 tabs navigable. 1 FAIL: LiveDeviceCard tap does not navigate on RN-Web (see ui_bugs)."
+  },
+  "seed_data_creation": "One TEST_iter7_* push_users doc during /api/email-subscriptions round-trip (benign, same pattern as iter5/6).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login testIDs: login-email-input / login-password-input / login-submit-button. Onboarding skip: set localStorage 'envmon:onboarding-seen'='1' before navigating to /login. Dashboard testIDs: dashboard-screen, dashboard-hero, hero-online, hero-total, hero-ring, hero-ring-pct, dashboard-live-count, live-card-<hardware_id>, header-bell, header-avatar, dashboard-loading. Tenant has 5 instruments (2 flowmeters, 1 dwlr, 2 do-analyzers). Upstream /api/instrument-registry/last-data returns 405 — client fallback synthesises response; DO-analyzers render as SILENT via the fallback because there is no do-analyzer /latest endpoint aggregated. Auto-refresh cadence is 20s (LIVE_POLL_MS in dashboard.tsx). Tab bar has no testIDs — navigate directly via URL. Admin creds admin@envirolytics.com / Admin@Envirolytics2026 still valid against monitor.envirolytics.in.",
+  "rca_of_issue": "LiveDeviceCard tap-to-navigate no-op on RN-Web. RCA: LiveDeviceCard.tsx renders the interactive layer as a plain <View style={StyleSheet.absoluteFill} onStartShouldSetResponder={...} onResponderRelease={onPress}/> inserted as the FIRST child of the outer Animated.View, followed by <LinearGradient>, <View head>, <View chips>, <View footer>. In React Native Web, siblings are laid out in normal document flow and later siblings paint on top of earlier absolute-positioned siblings (identical z-index). Mouse/touch events therefore hit the head/chips/footer (which don't participate in the responder system) and never bubble to the overlay's onStartShouldSetResponder. Reproduction: login → /dashboard → wait for cards → click any live-card-* → URL remains /dashboard. Mitigation options (in order of simplicity): (a) move the responder <View> to be the LAST child of Animated.View so it paints on top; (b) wrap the whole content in a Pressable/TouchableOpacity with onPress={onPress} instead of the overlay pattern (recommended — preserves press-scale animation via onPressIn/onPressOut); (c) add pointerEvents='none' to head/chips/footer to force events through — hacky, breaks any future nested interactivity."
+}

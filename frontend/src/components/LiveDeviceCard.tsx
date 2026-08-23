@@ -6,7 +6,7 @@
 // every field (owner, last-seen, live_values chips) is authoritative.
 
 import { useEffect } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Animated, {
   Easing,
@@ -92,87 +92,82 @@ export function LiveDeviceCard({
   const chips = Object.entries(device.last_values || {}).slice(0, 3);
 
   return (
-    <Animated.View
-      style={[styles.card, cardStyle]}
-      onTouchStart={() => (scale.value = withSpring(0.98, { damping: 20 }))}
-      onTouchEnd={() => (scale.value = withSpring(1, { damping: 12 }))}
-      onTouchCancel={() => (scale.value = withSpring(1, { damping: 12 }))}
-      testID={`live-card-${device.hardware_id}`}
-    >
-      {onPress ? (
-        <View
-          accessibilityRole="button"
-          onStartShouldSetResponder={() => true}
-          onResponderRelease={onPress}
-          style={StyleSheet.absoluteFill}
+    <Animated.View style={cardStyle} testID={`live-card-${device.hardware_id}`}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={() => (scale.value = withSpring(0.98, { damping: 20 }))}
+        onPressOut={() => (scale.value = withSpring(1, { damping: 12 }))}
+        style={styles.card}
+        accessibilityRole="button"
+        testID={`live-card-pressable-${device.hardware_id}`}
+      >
+        <LinearGradient
+          colors={[`${meta.color}22`, `${meta.color}05`]}
+          style={styles.gradientBg}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          pointerEvents="none"
         />
-      ) : null}
 
-      <LinearGradient
-        colors={[`${meta.color}22`, `${meta.color}05`]}
-        style={styles.gradientBg}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-      />
-
-      <View style={styles.head}>
-        <View
-          style={[
-            styles.iconBadge,
-            { backgroundColor: `${meta.color}22`, borderColor: `${meta.color}55` },
-          ]}
-        >
-          <Ionicons name={meta.icon} size={22} color={meta.color} />
-        </View>
-        <View style={{ flex: 1, marginLeft: 12 }}>
-          <Text style={styles.title} numberOfLines={1}>
-            {device.label || device.hardware_id}
-          </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {meta.label}
-            {device.location_name ? ` · ${device.location_name}` : ""}
-          </Text>
-        </View>
-        <View style={styles.statusWrap}>
-          <Animated.View style={[styles.led, { backgroundColor: statusColor }, ledStyle]} />
-          <Text style={[styles.statusText, { color: statusColor }]}>
-            {STATUS_LABEL[device.status] || "—"}
-          </Text>
-        </View>
-      </View>
-
-      {chips.length > 0 ? (
-        <View style={styles.chips}>
-          {chips.map(([k, v]) => (
-            <View key={k} style={styles.chip}>
-              <Text style={styles.chipKey}>{k}</Text>
-              <Text style={styles.chipVal} numberOfLines={1}>
-                {String(v)}
-              </Text>
-            </View>
-          ))}
-        </View>
-      ) : (
-        <Text style={styles.noData}>Waiting for first reading…</Text>
-      )}
-
-      <View style={styles.footer}>
-        <View style={styles.footerItem}>
-          <Ionicons name="time-outline" size={11} color={colors.textMuted} />
-          <Text style={styles.footerText} numberOfLines={1}>
-            {formatSinceLast(device.seconds_since_last)}
-          </Text>
-        </View>
-        {device.owner_name ? (
-          <View style={styles.footerItem}>
-            <Ionicons name="person-outline" size={11} color={colors.textMuted} />
-            <Text style={styles.footerText} numberOfLines={1}>
-              {device.owner_name}
+        <View style={styles.head}>
+          <View
+            style={[
+              styles.iconBadge,
+              { backgroundColor: `${meta.color}22`, borderColor: `${meta.color}55` },
+            ]}
+          >
+            <Ionicons name={meta.icon} size={22} color={meta.color} />
+          </View>
+          <View style={{ flex: 1, marginLeft: 12 }}>
+            <Text style={styles.title} numberOfLines={1}>
+              {device.label || device.hardware_id}
+            </Text>
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {meta.label}
+              {device.location_name ? ` · ${device.location_name}` : ""}
             </Text>
           </View>
-        ) : null}
-        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-      </View>
+          <View style={styles.statusWrap}>
+            <Animated.View style={[styles.led, { backgroundColor: statusColor }, ledStyle]} />
+            <Text style={[styles.statusText, { color: statusColor }]}>
+              {STATUS_LABEL[device.status] || "—"}
+            </Text>
+          </View>
+        </View>
+
+        {chips.length > 0 ? (
+          <View style={styles.chips}>
+            {chips.map(([k, v]) => (
+              <View key={k} style={styles.chip}>
+                <Text style={styles.chipKey}>{k}</Text>
+                <Text style={styles.chipVal} numberOfLines={1}>
+                  {String(v)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.noData}>Waiting for first reading…</Text>
+        )}
+
+        <View style={styles.footer}>
+          <View style={styles.footerItem}>
+            <Ionicons name="time-outline" size={11} color={colors.textMuted} />
+            <Text style={styles.footerText} numberOfLines={1}>
+              {formatSinceLast(device.seconds_since_last)}
+            </Text>
+          </View>
+          {device.owner_name ? (
+            <View style={styles.footerItem}>
+              <Ionicons name="person-outline" size={11} color={colors.textMuted} />
+              <Text style={styles.footerText} numberOfLines={1}>
+                {device.owner_name}
+              </Text>
+            </View>
+          ) : null}
+          <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        </View>
+      </Pressable>
     </Animated.View>
   );
 }
