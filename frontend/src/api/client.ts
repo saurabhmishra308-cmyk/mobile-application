@@ -303,8 +303,131 @@ export const api = {
     authed<{ instruments: Instrument[] }>("/api/instrument-registry"),
 
   // NEW — single call for the mobile home screen.
-  lastData: () =>
-    authed<LastDataResponse>("/api/instrument-registry/last-data"),
+  // Falls back gracefully if the upstream doesn't have this endpoint yet
+  // (HTTP 404 / 405) — we synthesise the same shape from the endpoints
+  // that DO exist: instruments + dwlrLatest + flowmeterLatest + offline.
+  lastData: async (): Promise<LastDataResponse> => {
+    try {
+      return await authed<LastDataResponse>("/api/instrument-registry/last-data");
+    } catch (e: any) {
+      if (e?.status !== 404 && e?.status !== 405) throw e;
+      // ── Client-side fallback ─────────────────────────────────────────
+      const [insR, dwR, fmR, offR] = await Promise.allSettled([
+        authed<{ instruments: Instrument[] }>("/api/instrument-registry"),
+        authed<{ readings: DwlrReading[] }>("/api/instruments/dwlr/latest"),
+        authed<{ flowmeters: FlowmeterReading[] }>("/api/flowmeter/latest"),
+        authed<{ offline: OfflineDevice[] }>("/api/alerts/offline?hours=24"),
+      ]);
+      const instruments =
+        insR.status === "fulfilled" ? insR.value.instruments || [] : [];
+      const dwlrByHw = new Map<string, DwlrReading>();
+      if (dwR.status === "fulfilled") {
+        for (const r of dwR.value.readings || []) {
+          if (r.hardware_id) dwlrByHw.set(r.hardware_id, r);
+        }
+      }
+      const fmByHw = new Map<string, FlowmeterReading>();
+      if (fmR.status === "fulfilled") {
+        for (const r of fmR.value.flowmeters || []) {
+          if (r.hardware_id) fmByHw.set(r.hardware_id, r);
+        }
+      }
+      const offlineByHw = new Map<string, OfflineDevice>();
+      if (offR.status === "fulfilled") {
+        for (const o of offR.value.offline || []) {
+          if (o.hardware_id) offlineByHw.set(o.hardware_id, o);
+        }
+      }
+      const now = Date.now();
+      const devices: LastDataDevice[] = instruments.map((ins) => {
+        const type = (ins.instrument_type || "").toLowerCase();
+        const latest =
+          type === "dwlr"
+            ? dwlrByHw.get(ins.hardware_id)
+            : type === "flowmeter"
+              ? fmByHw.get(ins.hardware_id)
+              : undefined;
+        const off = offlineByHw.get(ins.hardware_id);
+        const tsRaw =
+          (latest && (latest as any).timestamp) ||
+          (latest && (latest as any).ts) ||
+          off?.last_seen ||
+          null;
+        const secondsSinceLast = tsRaw
+          ? Math.max(0, Math.round((now - new Date(tsRaw).getTime()) / 1000))
+          : null;
+        let status: LastDataStatus = "silent";
+        if (off) status = "silent";
+        else if (secondsSinceLast === null) status = "silent";
+        else if (secondsSinceLast < 15 * 60) status = "live";
+        else if (secondsSinceLast < 6 * 3600) status = "stale";
+        else status = "silent";
+
+        // Build 3 short display chips from the freshest fields we have.
+        const chips: Record<string, string> = {};
+        if (latest) {
+          const raw = latest as Record<string, any>;
+          const pick = (keys: string[], label: string, unit: string, decimals = 2) => {
+            for (const k of keys) {
+              const v = raw[k];
+              if (v !== null && v !== undefined && v !== "" && !Number.isNaN(Number(v))) {
+                chips[label] = `${Number(v).toFixed(decimals)}${unit}`;
+                return;
+              }
+            }
+          };
+          if (type === "dwlr") {
+            pick(["water_level", "level", "depth", "LVL", "RAW", "D_SEN"], "Level", " m", 2);
+            pick(["water_temperature", "wtemp", "temperature", "temp", "WTEMP", "ATEMP"], "Temp", "°C", 1);
+            pick(["battery", "battery_v", "bat", "voltage", "BVOLT"], "Battery", " V", 2);
+          } else if (type === "flowmeter") {
+            pick(["flow_rate_m3h", "flow_rate", "rate", "flow", "flowrate"], "Flow", " m³/h", 3);
+            pick(
+              [
+                "totaliser_end_reading",
+                "forward_totalizer",
+                "totalizer",
+                "totaliser",
+                "cumulative_flow",
+                "total",
+                "final_forward_totalizer",
+              ],
+              "Total",
+              " m³",
+              3,
+            );
+            pick(["battery", "battery_v", "bat", "voltage", "BVOLT"], "Battery", " V", 2);
+          } else {
+            // pH / TDS / Conductivity — pick "value" as the headline.
+            pick(["value", "reading", type], "Value", "", 2);
+            pick(["battery", "battery_v", "bat", "voltage"], "Battery", " V", 2);
+            pick(["signal", "rssi", "SIGNAL"], "Signal", "", 0);
+          }
+        }
+
+        return {
+          hardware_id: ins.hardware_id,
+          instrument_type: ins.instrument_type,
+          label: ins.label,
+          location_name: ins.location_name,
+          category: ins.category,
+          owner_user_id: ins.owner_user_id,
+          owner_email: ins.owner_email,
+          owner_name: ins.owner_name,
+          seconds_since_last: secondsSinceLast,
+          status,
+          last_seen: tsRaw,
+          last_values: chips,
+          latest: latest as Record<string, any> | null,
+        };
+      });
+      return {
+        devices,
+        count: devices.length,
+        generated_at: new Date().toISOString(),
+      };
+    }
+  },
 
   latestAll: () =>
     authed<{ by_type: Record<string, any[]>; total: number }>(

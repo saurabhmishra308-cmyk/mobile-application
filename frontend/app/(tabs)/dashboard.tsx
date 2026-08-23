@@ -9,13 +9,19 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 
 import { ScreenHeader } from "@/src/components/ScreenHeader";
-import { MetricCard } from "@/src/components/MetricCard";
 import { StatusPill } from "@/src/components/StatusPill";
+import { LiveDeviceCard } from "@/src/components/LiveDeviceCard";
+import { HeaderActions } from "@/src/components/HeaderActions";
+import { CountUp } from "@/src/components/CountUp";
+import { OnlineRing } from "@/src/components/OnlineRing";
 import {
   api,
   Instrument,
+  LastDataDevice,
   OfflineDevice,
   LimitBreach,
   Weather,
@@ -24,13 +30,27 @@ import { useAuth } from "@/src/context/AuthContext";
 import { colors, radius, spacing, font } from "@/src/theme";
 import { fmtNum, fromNow, prettyType } from "@/src/utils/format";
 
+const LIVE_POLL_MS = 20_000; // 20s auto-refresh for the home screen
+
+// Time-of-day greeting shown at the top of the Dashboard.
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Good night";
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  if (h < 21) return "Good evening";
+  return "Good night";
+}
+
 export default function Dashboard() {
+  const router = useRouter();
   const { user, signOut } = useAuth();
   const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [liveDevices, setLiveDevices] = useState<LastDataDevice[]>([]);
   const [offline, setOffline] = useState<OfflineDevice[]>([]);
   const [breaches, setBreaches] = useState<LimitBreach[]>([]);
   const [weather, setWeather] = useState<Weather | null>(null);
-  const [broker, setBroker] = useState<{ connected: boolean; broker?: string } | null>(null);
+  const [, setBroker] = useState<{ connected: boolean; broker?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,20 +58,22 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [insR, offR, brR, wR, statusR] = await Promise.allSettled([
+      const [insR, offR, brR, wR, statusR, liveR] = await Promise.allSettled([
         api.instruments(),
         api.offline(24),
         api.limitBreaches(),
         api.weatherLive(),
         api.flowmeterStatus(),
+        api.lastData(),
       ]);
       if (insR.status === "fulfilled") setInstruments(insR.value.instruments || []);
       if (offR.status === "fulfilled") setOffline(offR.value.offline || []);
       if (brR.status === "fulfilled") setBreaches(brR.value.breaches || []);
       if (wR.status === "fulfilled") setWeather(wR.value);
       if (statusR.status === "fulfilled") setBroker(statusR.value);
+      if (liveR.status === "fulfilled") setLiveDevices(liveR.value.devices || []);
 
-      const failed = [insR, offR, brR, wR, statusR].find(
+      const failed = [insR, offR, brR, wR, statusR, liveR].find(
         (r) => r.status === "rejected",
       );
       if (failed && failed.status === "rejected") {
@@ -71,6 +93,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     load();
+    // Auto-refresh the live home screen every 20 seconds.
+    const id = setInterval(load, LIVE_POLL_MS);
+    return () => clearInterval(id);
   }, [load]);
 
   const stats = useMemo(() => {
@@ -103,34 +128,12 @@ export default function Dashboard() {
     <View style={styles.safe} testID="dashboard-screen">
       <ScreenHeader
         eyebrow={user?.location_name ? `SITE · ${user.location_name.toUpperCase()}` : "ENVIROLYTICS · MONITOR"}
-        title={`Hello, ${user?.full_name?.split(" ")[0] || "Admin"}`}
+        title={`${greeting()}, ${user?.full_name?.split(" ")[0] || "there"}`}
         right={
-          <View
-            style={[
-              styles.brokerDot,
-              {
-                backgroundColor: broker?.connected
-                  ? "rgba(16,185,129,0.15)"
-                  : "rgba(239,68,68,0.15)",
-                borderColor: broker?.connected
-                  ? "rgba(16,185,129,0.4)"
-                  : "rgba(239,68,68,0.4)",
-              },
-            ]}
-            testID="broker-status"
-          >
-            <View
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: broker?.connected ? colors.eco : colors.danger,
-              }}
-            />
-            <Text style={{ color: colors.text, fontSize: 10, letterSpacing: 1, fontWeight: "700" }}>
-              {broker?.connected ? "MQTT" : "MQTT DOWN"}
-            </Text>
-          </View>
+          <HeaderActions
+            fullName={user?.full_name || user?.email}
+            badgeCount={breaches.length + offline.length}
+          />
         }
       />
 
@@ -152,55 +155,102 @@ export default function Dashboard() {
           </View>
         ) : null}
 
-        <View style={styles.row}>
-          <MetricCard
-            testID="metric-total"
-            label="Instruments"
-            value={stats.total}
-            icon="hardware-chip-outline"
-            accent={colors.water}
+        {/* ── HERO CARD — animated ring + count-up stats ────────────── */}
+        <View style={styles.heroCard} testID="dashboard-hero">
+          <LinearGradient
+            colors={[
+              "rgba(16, 185, 129, 0.16)",
+              "rgba(14, 165, 233, 0.08)",
+              "rgba(3, 17, 31, 0)",
+            ]}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
           />
-          <MetricCard
-            testID="metric-online"
-            label="Online"
-            value={stats.onlineCount}
-            icon="pulse-outline"
-            accent={colors.eco}
-          />
-        </View>
-        <View style={styles.row}>
-          <MetricCard
-            testID="metric-offline"
-            label="Offline"
-            value={stats.offlineCount}
-            icon="cloud-offline-outline"
-            accent={colors.warning}
-          />
-          <MetricCard
-            testID="metric-alerts"
-            label="Alerts"
-            value={breaches.length}
-            icon="alert-circle-outline"
-            accent={colors.danger}
+          <View style={styles.heroLeft}>
+            <Text style={styles.heroEyebrow}>NETWORK HEALTH</Text>
+            <View style={styles.heroValRow}>
+              <CountUp
+                value={stats.onlineCount}
+                style={styles.heroValue}
+                testID="hero-online"
+              />
+              <Text style={styles.heroSlash}>/</Text>
+              <CountUp
+                value={stats.total}
+                style={styles.heroTotal}
+                testID="hero-total"
+              />
+            </View>
+            <Text style={styles.heroSub}>
+              instruments reporting to Envirolytics
+            </Text>
+
+            {/* Inline mini stats: DWLR / Flowmeter counts + alerts */}
+            <View style={styles.miniStats}>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.water }]} />
+                <CountUp value={stats.dwlr} style={styles.miniVal} />
+                <Text style={styles.miniLbl}>DWLR</Text>
+              </View>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.eco }]} />
+                <CountUp value={stats.fm} style={styles.miniVal} />
+                <Text style={styles.miniLbl}>Flow</Text>
+              </View>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.warning }]} />
+                <CountUp value={stats.offlineCount} style={styles.miniVal} />
+                <Text style={styles.miniLbl}>Offline</Text>
+              </View>
+              <View style={styles.miniStat}>
+                <View style={[styles.miniDot, { backgroundColor: colors.danger }]} />
+                <CountUp value={breaches.length} style={styles.miniVal} />
+                <Text style={styles.miniLbl}>Alerts</Text>
+              </View>
+            </View>
+          </View>
+          <OnlineRing
+            online={stats.onlineCount}
+            total={stats.total}
+            testID="hero-ring"
           />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Instrument Mix</Text>
-          <View style={styles.mixCard} testID="mix-card">
-            <View style={styles.mixItem}>
-              <View style={[styles.mixDot, { backgroundColor: colors.water }]} />
-              <Text style={styles.mixLabel}>DWLR</Text>
-              <Text style={styles.mixValue}>{stats.dwlr}</Text>
+        {/* ── Live Devices — from /api/instrument-registry/last-data ── */}
+        {liveDevices.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeadRow}>
+              <Text style={styles.sectionTitle}>Live Data</Text>
+              <View style={styles.livePill} testID="dashboard-live-count">
+                <View style={styles.livePillDot} />
+                <Text style={styles.livePillText}>
+                  {liveDevices.filter((d) => d.status === "live").length} / {liveDevices.length} LIVE
+                </Text>
+              </View>
             </View>
-            <View style={styles.mixDivider} />
-            <View style={styles.mixItem}>
-              <View style={[styles.mixDot, { backgroundColor: colors.eco }]} />
-              <Text style={styles.mixLabel}>Flowmeter</Text>
-              <Text style={styles.mixValue}>{stats.fm}</Text>
+            <View style={styles.liveGrid}>
+              {liveDevices.slice(0, 6).map((d, i) => (
+                <LiveDeviceCard
+                  key={d.hardware_id}
+                  device={d}
+                  index={i}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/device/[id]",
+                      params: {
+                        id: d.hardware_id,
+                        type: d.instrument_type,
+                        label: d.label || d.hardware_id,
+                        location: d.location_name || "",
+                      },
+                    })
+                  }
+                />
+              ))}
             </View>
           </View>
-        </View>
+        ) : null}
 
         {weather ? (
           <View style={styles.section}>
@@ -292,6 +342,126 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   section: { marginTop: spacing.lg },
+
+  // ── Hero card ─────────────────────────────────────────────────────
+  heroCard: {
+    marginTop: spacing.sm,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.bgElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: "hidden",
+    flexDirection: "row",
+    gap: spacing.md,
+    alignItems: "center",
+    // Premium 3D lift
+    shadowColor: "#10b981",
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 8,
+  },
+  heroLeft: { flex: 1 },
+  heroEyebrow: {
+    color: colors.textSecondary,
+    fontSize: 10.5,
+    letterSpacing: 2,
+    fontWeight: "800",
+  },
+  heroValRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+    marginTop: 4,
+  },
+  heroValue: {
+    color: colors.text,
+    fontSize: 40,
+    fontWeight: "800",
+    fontFamily: font.mono,
+    letterSpacing: -1,
+    textShadowColor: "rgba(16, 185, 129, 0.4)",
+    textShadowRadius: 20,
+  },
+  heroSlash: {
+    color: colors.textMuted,
+    fontSize: 24,
+    fontWeight: "700",
+    fontFamily: font.mono,
+  },
+  heroTotal: {
+    color: colors.textSecondary,
+    fontSize: 22,
+    fontWeight: "700",
+    fontFamily: font.mono,
+  },
+  heroSub: {
+    color: colors.textSecondary,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  miniStats: {
+    marginTop: spacing.md,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  miniStat: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  miniDot: { width: 6, height: 6, borderRadius: 3 },
+  miniVal: {
+    color: colors.text,
+    fontSize: 13,
+    fontFamily: font.mono,
+    fontWeight: "800",
+  },
+  miniLbl: {
+    color: colors.textSecondary,
+    fontSize: 10.5,
+    letterSpacing: 0.4,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  sectionHeadRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+  livePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(16, 185, 129, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(16, 185, 129, 0.35)",
+  },
+  livePillDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: colors.eco,
+    shadowColor: colors.eco,
+    shadowOpacity: 0.9,
+    shadowRadius: 6,
+  },
+  livePillText: {
+    color: colors.eco,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    fontWeight: "800",
+    fontFamily: font.mono,
+  },
+  liveGrid: {
+    gap: spacing.md,
+  },
   sectionHead: {
     flexDirection: "row",
     alignItems: "center",
