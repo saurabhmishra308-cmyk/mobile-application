@@ -7,6 +7,20 @@ export const USER_KEY = "envirolytics.user";
 export const OWN_BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || "";
 
+// Central URL builder — the web app had a CSV-returns-HTML bug because raw
+// template literals interpolated `process.env.REACT_APP_BACKEND_URL` (undefined
+// at build). Never build URLs by hand — always go through apiUrl().
+export function apiUrl(path: string): string {
+  const base = (API_BASE || "").replace(/\/$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+// Same helper for our own container backend (email / push / cron).
+export function ownBackendUrl(path: string): string {
+  const base = (OWN_BACKEND_URL || "").replace(/\/$/, "");
+  return `${base}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export type UserProfile = {
   id: string;
   email: string;
@@ -18,6 +32,10 @@ export type UserProfile = {
   latitude?: number | null;
   longitude?: number | null;
   permissions?: Record<string, boolean>;
+  // NEW: /api/auth/me now returns view_permissions to drive tab visibility.
+  view_permissions?: Record<string, boolean>;
+  service_expiry_date?: string | null;
+  service_term_years?: number | null;
 };
 
 export type LoginResponse = {
@@ -38,7 +56,7 @@ async function request<T>(
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await fetch(apiUrl(path), { ...options, headers });
   const text = await res.text();
   let body: any = null;
   try {
@@ -204,10 +222,90 @@ export type AdminUser = {
 };
 
 // ---------- Endpoints ----------
+// ── /api/instrument-registry/last-data ──────────────────────────────────
+// The upstream's home-screen endpoint. Returns every visible device + latest
+// reading + status ("live" / "stale" / "silent") + owner + last_values chips.
+// Suggested poll interval: 15–30 s.
+export type LastDataStatus = "live" | "stale" | "silent";
+
+export type LastDataDevice = {
+  hardware_id: string;
+  instrument_type: string;
+  label?: string | null;
+  location_name?: string | null;
+  category?: string | null;
+  owner_user_id?: string | null;
+  owner_email?: string | null;
+  owner_name?: string | null;
+  seconds_since_last?: number | null;
+  status: LastDataStatus;
+  last_seen?: string | null;
+  // Small key/value chips (e.g., { level: "12.4 m", battery: "6.1 V" })
+  last_values?: Record<string, string>;
+  // Raw latest reading if the client wants deeper inspection
+  latest?: Record<string, any> | null;
+};
+
+export type LastDataResponse = {
+  devices: LastDataDevice[];
+  count: number;
+  generated_at?: string;
+};
+
+// ── Certificates ────────────────────────────────────────────────────────
+export type Certificate = {
+  id: string;
+  hardware_id?: string;
+  title?: string;
+  issued_on?: string;
+  valid_till?: string;
+  status?: string;
+  file_url?: string;
+};
+
+// ── Reports (analytics dashboards on the web) ──────────────────────────
+export type FlowVsLevelPoint = {
+  timestamp: string;
+  flow_m3h?: number | null;
+  level_m?: number | null;
+};
+
+// ── Notifications / alert histories ─────────────────────────────────────
+export type AlertEntry = {
+  id?: string;
+  hardware_id?: string;
+  parameter?: string;
+  value?: number;
+  threshold?: number;
+  severity?: "warning" | "critical" | string;
+  timestamp?: string;
+  resolved?: boolean;
+};
+
+// ── Customer profile ────────────────────────────────────────────────────
+export type CustomerProfile = {
+  id?: string;
+  email?: string;
+  full_name?: string;
+  company_name?: string;
+  phone?: string;
+  address?: string;
+  service_expiry_date?: string | null;
+  service_term_years?: number | null;
+  view_permissions?: Record<string, boolean>;
+  permissions?: Record<string, boolean>;
+  [k: string]: any;
+};
+
 export const api = {
   me: () => authed<UserProfile>("/api/auth/me"),
   instruments: () =>
     authed<{ instruments: Instrument[] }>("/api/instrument-registry"),
+
+  // NEW — single call for the mobile home screen.
+  lastData: () =>
+    authed<LastDataResponse>("/api/instrument-registry/last-data"),
+
   latestAll: () =>
     authed<{ by_type: Record<string, any[]>; total: number }>(
       "/api/instruments/all/latest",
@@ -223,6 +321,16 @@ export const api = {
       readings: DwlrReading[];
       count: number;
     }>(`/api/instruments/dwlr/${encodeURIComponent(hw)}/history?hours=${hours}`),
+
+  // DWLR daily aggregates for long-range trends (up to 3,650 days lifetime).
+  dwlrDaily: (hw: string, days: number = 30) =>
+    authed<{
+      hardware_id: string;
+      days: number;
+      readings: { date: string; min: number; max: number; avg: number }[];
+    }>(
+      `/api/flowmeter-mgmt/dwlr/${encodeURIComponent(hw)}/daily?days=${Math.min(days, 3650)}`,
+    ),
 
   // ── Generic instrument endpoints (pH / TDS / Conductivity — same shape) ──
   instrumentLatest: (type: string) =>
@@ -363,20 +471,87 @@ export const api = {
   },
 
   // Server-generated file exports; caller downloads binary via the URL.
+  // NEW: exports now cap at 100,000 rows (was 5k), and only m³/h columns.
   exportUrl: (params: {
     instrument_type: "dwlr" | "flowmeter";
     format: "csv" | "pdf";
     hardware_id?: string;
     days?: number;
+    limit?: number;
   }) => {
     const qs = new URLSearchParams();
     qs.set("instrument_type", params.instrument_type);
     qs.set("format", params.format);
     if (params.hardware_id) qs.set("hardware_id", params.hardware_id);
     if (params.days) qs.set("days", String(params.days));
-    return `${API_BASE}/api/flowmeter-mgmt/export?${qs.toString()}`;
+    if (params.limit) qs.set("limit", String(Math.min(params.limit, 100_000)));
+    return apiUrl(`/api/flowmeter-mgmt/export?${qs.toString()}`);
   },
+
+  // ── Certificates ─────────────────────────────────────────────────────
+  certificates: (clientUserId?: string) => {
+    const qs = clientUserId
+      ? `?client_user_id=${encodeURIComponent(clientUserId)}`
+      : "";
+    return authed<{ certificates: Certificate[]; count: number }>(
+      `/api/certificates${qs}`,
+    );
+  },
+  certificateDownloadUrl: (certId: string) =>
+    apiUrl(`/api/certificates/download/${encodeURIComponent(certId)}`),
+
+  // ── Instrument photos ───────────────────────────────────────────────
+  instrumentPhotos: (hw: string) =>
+    authed<{ photos: { id: string; url: string; caption?: string }[] }>(
+      `/api/instrument-photos/${encodeURIComponent(hw)}`,
+    ),
+
+  // ── Reports (analytics dashboards) — extras beyond legacy ones above ─
+  flowVsLevel: (hardware_id: string, days: number = 7) =>
+    authed<{ points: FlowVsLevelPoint[] }>(
+      `/api/reports/flow-vs-level?hardware_id=${encodeURIComponent(hardware_id)}&days=${days}`,
+    ),
+
+  // ── Customer profile ────────────────────────────────────────────────
+  customerProfile: () => authed<CustomerProfile>("/api/customer-profile"),
+
+  // ── Water quality reports (POST — CSV/PDF binary download) ──────────
+  waterQualityReportUrl: () => apiUrl("/api/water-quality/report"),
+  waterQualityHistory: (hw: string, from: string, to: string) =>
+    authed<{ hardware_id: string; readings: WaterQualityReading[] }>(
+      `/api/water-quality/history/${encodeURIComponent(hw)}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+    ),
+
+  // ── Notifications / alert histories ─────────────────────────────────
+  doAlertHistory: () =>
+    authed<{ alerts: AlertEntry[] }>("/api/notifications/do-alerts/history"),
+  chlorineAlertHistory: () =>
+    authed<{ alerts: AlertEntry[] }>(
+      "/api/notifications/chlorine-alerts/history",
+    ),
 };
+
+// ── Client OTP recovery (public, unauthenticated) ─────────────────────
+export async function requestClientRecoveryOtp(email: string) {
+  return request<{ ok: boolean; message?: string }>(
+    "/api/auth/client-recovery/request-otp",
+    { method: "POST", body: JSON.stringify({ email }) },
+  );
+}
+
+export async function verifyClientRecoveryOtp(
+  email: string,
+  otp: string,
+  new_password: string,
+) {
+  return request<{ ok: boolean; message?: string }>(
+    "/api/auth/client-recovery/verify-otp",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, otp, new_password }),
+    },
+  );
+}
 
 // ---------- Our own backend (push relay + email) ----------
 export async function registerPushOnBackend(body: {

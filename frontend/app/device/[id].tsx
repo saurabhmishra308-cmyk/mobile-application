@@ -165,6 +165,7 @@ export default function DeviceDetail() {
           key: "flow",
           value: pickReadingValue(latest, [...READING_KEYS.flowRate]),
           unit: "m³/h",
+          decimals: 3,
           icon: "speedometer-outline" as const,
           color: colors.eco,
         },
@@ -173,6 +174,7 @@ export default function DeviceDetail() {
           key: "totalizer",
           value: pickReadingValue(latest, [...READING_KEYS.totalizer]),
           unit: "m³",
+          decimals: 3,
           icon: "layers-outline" as const,
           color: colors.water,
         },
@@ -181,6 +183,7 @@ export default function DeviceDetail() {
           key: "battery",
           value: pickReadingValue(latest, [...READING_KEYS.battery]),
           unit: "V",
+          decimals: 2,
           icon: "battery-half-outline" as const,
           color: colors.warning,
         },
@@ -193,6 +196,7 @@ export default function DeviceDetail() {
           key: "level",
           value: pickReadingValue(latest, [...READING_KEYS.waterLevel]),
           unit: "m",
+          decimals: 2,
           icon: "water-outline" as const,
           color: colors.water,
         },
@@ -201,6 +205,7 @@ export default function DeviceDetail() {
           key: "temp",
           value: pickReadingValue(latest, [...READING_KEYS.waterTemp]),
           unit: "°C",
+          decimals: 2,
           icon: "thermometer-outline" as const,
           color: colors.warning,
         },
@@ -209,6 +214,7 @@ export default function DeviceDetail() {
           key: "battery",
           value: pickReadingValue(latest, [...READING_KEYS.battery]),
           unit: "V",
+          decimals: 2,
           icon: "battery-half-outline" as const,
           color: colors.eco,
         },
@@ -222,6 +228,7 @@ export default function DeviceDetail() {
         key: "value",
         value: pickReadingValue(latest, m.primaryKeys),
         unit: m.unit,
+        decimals: 2,
         icon: m.icon,
         color: m.color,
       },
@@ -230,6 +237,7 @@ export default function DeviceDetail() {
         key: "battery",
         value: pickReadingValue(latest, [...READING_KEYS.battery]),
         unit: "V",
+        decimals: 2,
         icon: "battery-half-outline" as const,
         color: colors.eco,
       },
@@ -238,6 +246,7 @@ export default function DeviceDetail() {
         key: "signal",
         value: pickReadingValue(latest, [...READING_KEYS.signal]),
         unit: "",
+        decimals: 0,
         icon: "cellular-outline" as const,
         color: colors.textSecondary,
       },
@@ -356,7 +365,7 @@ export default function DeviceDetail() {
                 </View>
                 <Text style={styles.metricLabel}>{m.label}</Text>
                 <View style={styles.metricValRow}>
-                  <Text style={styles.metricValue}>{fmtNum(m.value, 2)}</Text>
+                  <Text style={styles.metricValue}>{fmtNum(m.value, (m as any).decimals ?? 2)}</Text>
                   <Text style={styles.metricUnit}>{m.unit}</Text>
                 </View>
               </View>

@@ -57,8 +57,15 @@ export const INSTRUMENT_META: Record<
     icon: "speedometer-outline",
     color: "#10b981",
     label: "Flowmeter",
+    // NEW: web uses m³/h everywhere; lph / lpm are deprecated + hidden.
     unit: "m³/h",
-    primaryKeys: ["flow_rate", "rate", "flow", "flowrate"],
+    primaryKeys: [
+      "flow_rate_m3h",
+      "flow_rate",
+      "rate",
+      "flow",
+      "flowrate",
+    ],
   },
   ph: {
     icon: "flask-outline",
@@ -158,11 +165,22 @@ export const READING_KEYS = {
     "signal", "rssi", "signal_strength",
     "SIGNAL",                                   // firmware v2
   ],
+  // Flowmeter — the web app now standardises on m³/h ONLY, with 3 decimals.
+  // We still list lph/lpm as fallbacks in case an old device reports them.
   flowRate: [
+    "flow_rate_m3h",                            // preferred
     "flow_rate", "rate", "flow", "flowrate",
+    "flow_rate_lph", "flow_rate_lpm",           // legacy — should be m³/h from now on
   ],
+  // Totalizer — the web renamed initial/final -> totaliser_start/end. Live MQTT
+  // still emits `forward_totalizer` = the cumulative end reading.
   totalizer: [
+    "totaliser_end_reading",                    // preferred end reading
+    "totaliser_start_reading",
+    "forward_totalizer",                        // live MQTT cumulative
     "totalizer", "totaliser", "cumulative_flow", "total",
+    "final_forward_totalizer",                  // legacy
+    "initial_forward_totalizer",                // legacy
   ],
 } as const;
 
