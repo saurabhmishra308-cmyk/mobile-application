@@ -2,7 +2,7 @@
   "expo": {
     "name": "Envirolytics Monitor",
     "slug": "envirolytics-monitor",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -19,7 +19,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "in.envirolytics.mobile",
-      "buildNumber": "2",
+      "buildNumber": "3",
       "associatedDomains": [
         "applinks:mobileapp.envirolytics.in"
       ],
@@ -36,7 +36,7 @@
 
     "android": {
       "package": "in.envirolytics.mobile",
-      "versionCode": 2,
+      "versionCode": 3,
 
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
