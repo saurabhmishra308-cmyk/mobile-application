@@ -31,7 +31,6 @@ export default function ReportsScreen() {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
   const [consumption, setConsumption] = useState<{
     borewells: { hardware_id: string; label: string; consumption_kl: number }[];
-    grand_total_kl: number;
   } | null>(null);
   const [selectedFm, setSelectedFm] = useState<string | null>(null);
   const [pumping, setPumping] = useState<
@@ -64,7 +63,6 @@ export default function ReportsScreen() {
           borewells: (consumRes.borewells || []).filter(
             (b) => b.hardware_id && b.hardware_id !== "nan",
           ),
-          grand_total_kl: consumRes.grand_total_kl || 0,
         });
 
         const pickedFm =
@@ -192,13 +190,6 @@ export default function ReportsScreen() {
               <View>
                 <Text style={styles.cardEyebrow}>GROUNDWATER</Text>
                 <Text style={styles.cardTitle}>Borewell Consumption · Last {days}d</Text>
-              </View>
-              <View style={styles.totalPill}>
-                <Text style={styles.totalPillLabel}>TOTAL</Text>
-                <Text style={styles.totalPillValue}>
-                  {fmtNum(consumption?.grand_total_kl, 2)}
-                </Text>
-                <Text style={styles.totalPillUnit}>KL</Text>
               </View>
             </View>
             {consumption && consumption.borewells.length > 0 ? (
@@ -569,3 +560,6 @@ const styles = StyleSheet.create({
   emailBtnText: { color: "#fff", fontWeight: "800", fontSize: 14, letterSpacing: 0.3 },
   emptyText: { color: colors.textMuted, fontSize: 12, textAlign: "center", paddingVertical: 12 },
 });
+
+
+
