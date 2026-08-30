@@ -50,6 +50,10 @@ export default function ReportsScreen() {
     () => instruments.filter((i) => i.instrument_type === "flowmeter"),
     [instruments],
   );
+    const hasDwlr = useMemo(
+      () => instruments.some((i) => i.instrument_type === "dwlr"),
+      [instruments],
+    );
 
   const load = useCallback(
     async (d: number = days, fmHw?: string) => {
@@ -297,22 +301,24 @@ export default function ReportsScreen() {
                 busy={downloading === "pdf-fm"}
                 onPress={() => runDownload("pdf-fm")}
               />
-              <DownloadButton
-                testID="dl-dwlr-csv"
-                icon="water-outline"
-                label="DWLR · CSV"
-                helper="Excel-ready"
-                busy={downloading === "csv-dwlr"}
-                onPress={() => runDownload("csv-dwlr")}
-              />
-              <DownloadButton
-                testID="dl-dwlr-pdf"
-                icon="document-attach-outline"
-                label="DWLR · PDF"
-                helper="Board-ready"
-                busy={downloading === "pdf-dwlr"}
-                onPress={() => runDownload("pdf-dwlr")}
-              />
+                {hasDwlr ? <>
+                  <DownloadButton
+                    testID="dl-dwlr-csv"
+                    icon="water-outline"
+                    label="DWLR · CSV"
+                    helper="Excel-ready"
+                    busy={downloading === "csv-dwlr"}
+                    onPress={() => runDownload("csv-dwlr")}
+                  />
+                  <DownloadButton
+                    testID="dl-dwlr-pdf"
+                    icon="document-attach-outline"
+                    label="DWLR · PDF"
+                    helper="Board-ready"
+                    busy={downloading === "pdf-dwlr"}
+                    onPress={() => runDownload("pdf-dwlr")}
+                  />
+                </> : null}
             </View>
             {downloadNote ? (
               <Text style={styles.dlNote} testID="download-note">
@@ -325,12 +331,7 @@ export default function ReportsScreen() {
               style={styles.emailBtn}
               activeOpacity={0.85}
               onPress={() => {
-                setEmailInitialKinds([
-                  "flowmeter_csv",
-                  "flowmeter_pdf",
-                  "dwlr_csv",
-                  "dwlr_pdf",
-                ]);
+                setEmailInitialKinds(hasDwlr ? ["flowmeter_csv", "flowmeter_pdf", "dwlr_csv", "dwlr_pdf"] : ["flowmeter_csv", "flowmeter_pdf"]);
                 setEmailOpen(true);
               }}
             >
@@ -560,6 +561,7 @@ const styles = StyleSheet.create({
   emailBtnText: { color: "#fff", fontWeight: "800", fontSize: 14, letterSpacing: 0.3 },
   emptyText: { color: colors.textMuted, fontSize: 12, textAlign: "center", paddingVertical: 12 },
 });
+
 
 
 
